@@ -1,0 +1,10 @@
+name = "Generic Gunplay";
+picture = "";
+logoSmall = "";
+logo = "";
+logoOver = "";
+tooltip = "Generic Gunplay";
+overview = "Automatic gunplay balancing and visible stats for loaded vanilla and modded weapons.";
+action = "";
+author = "Blubber";
+version = "1.0";
