@@ -4,37 +4,51 @@ modded class Weapon_Base
 	protected bool m_GGStatsDirty = true;
 	protected string m_GGLastFireMode;
 	protected int m_GGConfigRevision = -1;
+	protected int m_GGAttachmentTreeRevision;
+	protected int m_GGLaserCacheAttachmentRevision = -1;
+	protected int m_GGLaserCacheConfigRevision = -1;
+	protected bool m_GGLaserCacheValue;
+	protected bool m_GGModifierRefreshQueued;
 
 	void Weapon_Base()
 	{
 		m_GGStatsManager = new GGWeaponStatsManager();
 		m_GGLastFireMode = "";
+		m_GGAttachmentTreeRevision = 0;
 	}
 
 	override void EEItemAttached(EntityAI item, string slot_name)
 	{
-		m_GGStatsDirty = true;
 		super.EEItemAttached(item, slot_name);
+		GGMarkAttachmentTreeDirty();
+		if (item)
+		{
+			string message = "Attached " + item.GetType() + " to " + GetType() + " slot=" + slot_name;
+			GGDebug.Log(8, "ATTACHMENT", message);
+			GGDebug.ClientState(8, "ATTACHMENT", "weapon_" + GGUtil.Key(GetType()) + "_slot_" + GGUtil.Key(slot_name), item.GetType(), message);
+		}
 	}
 
 	override void EEItemDetached(EntityAI item, string slot_name)
 	{
-		m_GGStatsDirty = true;
 		super.EEItemDetached(item, slot_name);
-	}
-
-	override void OnVariablesSynchronized()
-	{
-		m_GGStatsDirty = true;
-		super.OnVariablesSynchronized();
+		GGMarkAttachmentTreeDirty();
+		string itemType = "unknown";
+		if (item) itemType = item.GetType();
+		string message = "Detached " + itemType + " from " + GetType() + " slot=" + slot_name;
+		GGDebug.Log(8, "ATTACHMENT", message);
+		GGDebug.ClientState(8, "ATTACHMENT", "weapon_" + GGUtil.Key(GetType()) + "_slot_" + GGUtil.Key(slot_name), "empty", message);
 	}
 
 	override void OnFireModeChange(int fireMode)
 	{
 		super.OnFireModeChange(fireMode);
 		m_GGStatsDirty = true;
+		string modeMessage = "Fire mode changed. weapon=" + GetType() + " index=" + fireMode.ToString();
+		GGDebug.Log(7, "WEAPON", modeMessage);
+		GGDebug.ClientState(7, "WEAPON", "firemode_" + GGUtil.Key(GetType()), fireMode.ToString(), modeMessage);
 		GGEnsureStats();
-		if (GGShouldApplyGunplay() && GetPropertyModifierObject()) GetPropertyModifierObject().UpdateModifiers();
+		GGQueueModifierRefresh();
 		PlayerBase player = PlayerBase.Cast(GetHierarchyRootPlayer());
 		if (player && GGShouldApplyGunplay())
 		{
@@ -48,13 +62,60 @@ modded class Weapon_Base
 	override RecoilBase SpawnRecoilObject()
 	{
 		GGEnsureStats();
-		if (GGShouldApplyGunplay() && GetPropertyModifierObject()) GetPropertyModifierObject().UpdateModifiers();
+		if (GGDebug.Enabled(10))
+		{
+			GGDebug.Count(10, "WEAPON", "recoil_objects_" + GGUtil.Key(GetType()), 10000);
+			GGDebug.ClientCount(10, "WEAPON", "recoil_objects_" + GGUtil.Key(GetType()), 10000);
+		}
 		return super.SpawnRecoilObject();
 	}
 
 	void GGMarkStatsDirty()
 	{
 		m_GGStatsDirty = true;
+		GGDebug.Count(9, "CACHE", "weapon_stats_invalidations", 10000);
+		GGDebug.ClientCount(9, "CACHE", "weapon_stats_invalidations", 10000);
+	}
+
+	void GGMarkAttachmentTreeDirty()
+	{
+		m_GGAttachmentTreeRevision++;
+		m_GGLaserCacheAttachmentRevision = -1;
+		GGMarkStatsDirty();
+		GGQueueModifierRefresh();
+	}
+
+	int GetGGAttachmentTreeRevision()
+	{
+		return m_GGAttachmentTreeRevision;
+	}
+
+	bool GGHasLaserAttachmentCached()
+	{
+		int configRevision = GetGGConfigManager().GetRuntimeRevision();
+		bool attachmentCacheValid = m_GGLaserCacheAttachmentRevision == m_GGAttachmentTreeRevision;
+		bool configCacheValid = m_GGLaserCacheConfigRevision == configRevision;
+		if (attachmentCacheValid && configCacheValid) return m_GGLaserCacheValue;
+
+		m_GGLaserCacheValue = GGWeaponAttachmentQueries.ScanHasLaser(this);
+		m_GGLaserCacheAttachmentRevision = m_GGAttachmentTreeRevision;
+		m_GGLaserCacheConfigRevision = configRevision;
+		return m_GGLaserCacheValue;
+	}
+
+	void GGQueueModifierRefresh()
+	{
+		if (m_GGModifierRefreshQueued || !g_Game || !GGShouldApplyGunplay()) return;
+		m_GGModifierRefreshQueued = true;
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Call(GGApplyQueuedModifierRefresh);
+	}
+
+	protected void GGApplyQueuedModifierRefresh()
+	{
+		m_GGModifierRefreshQueued = false;
+		if (!GGShouldApplyGunplay()) return;
+		GGEnsureStats();
+		if (GetPropertyModifierObject()) GetPropertyModifierObject().UpdateModifiers();
 	}
 
 	void GGEnsureStats()
@@ -74,6 +135,7 @@ modded class Weapon_Base
 		}
 		if (!m_GGStatsDirty) return;
 		if (!m_GGStatsManager) m_GGStatsManager = new GGWeaponStatsManager();
+		GGDebug.Log(8, "CACHE", "Recalculating weapon stats. weapon=" + GetType() + " revision=" + m_GGConfigRevision.ToString() + " mode=" + currentMode);
 		m_GGStatsManager.Calculate(this);
 		m_GGStatsDirty = false;
 	}
@@ -165,8 +227,7 @@ modded class ItemBase
 			Weapon_Base weapon = Weapon_Base.Cast(parent);
 			if (weapon)
 			{
-				weapon.GGMarkStatsDirty();
-				if (weapon.GetPropertyModifierObject()) weapon.GetPropertyModifierObject().UpdateModifiers();
+				weapon.GGMarkAttachmentTreeDirty();
 				return;
 			}
 			parent = parent.GetHierarchyParent();

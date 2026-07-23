@@ -11,8 +11,12 @@ modded class DayZPlayerImplementAiming
 		Weapon_Base weapon = Weapon_Base.Cast(player.GetHumanInventory().GetEntityInHands());
 		if (!weapon || !weapon.GGShouldApplyGunplay()) return;
 		weapon.GGMarkStatsDirty();
-		if (weapon.GetPropertyModifierObject()) weapon.GetPropertyModifierObject().UpdateModifiers();
+		weapon.GGQueueModifierRefresh();
 		float transitionTime = weapon.GetGGOpticEnterDelay() / 1000.0;
+		string transitionState = transitionTime.ToString();
+		string transitionMessage = "ADS transition registered. weapon=" + weapon.GetType() + " seconds=" + transitionState;
+		GGDebug.State(6, "ADS", GGUtil.Key(weapon.GetType()), transitionState, transitionMessage);
+		GGDebug.ClientState(6, "ADS", GGUtil.Key(weapon.GetType()), transitionState, transitionMessage);
 		DayZPlayerCameras.RegisterTransitionTime(DayZPlayerCameras.DAYZCAMERA_1ST, DayZPlayerCameras.DAYZCAMERA_IRONSIGHTS, transitionTime, false);
 		DayZPlayerCameras.RegisterTransitionTime(DayZPlayerCameras.DAYZCAMERA_1ST, DayZPlayerCameras.DAYZCAMERA_OPTICS, transitionTime, false);
 		DayZPlayerCameras.RegisterTransitionTime(DayZPlayerCameras.DAYZCAMERA_IRONSIGHTS, DayZPlayerCameras.DAYZCAMERA_OPTICS, transitionTime, true);
@@ -37,12 +41,26 @@ modded class DayZPlayerImplementAiming
 		m_SwayModifier[1] = m_SwayModifier[1] * hipFire;
 		float hipFireSpeed = GGUtil.Clamp(hipFire, 0.35, 2.0);
 		m_SwayModifier[2] = m_SwayModifier[2] * hipFireSpeed;
+		if (GGDebug.Enabled(6))
+		{
+			string state = hipFire.ToString() + "|" + hipFireSpeed.ToString();
+			string message = "Applied hipfire aim filter. weapon=" + weapon.GetType();
+			message += " sway=" + hipFire.ToString();
+			message += " speed=" + hipFireSpeed.ToString();
+			GGDebug.State(6, "HIPFIRE", GGUtil.Key(weapon.GetType()), state, message);
+			GGDebug.ClientState(6, "HIPFIRE", GGUtil.Key(weapon.GetType()), state, message);
+		}
 	}
 
 	protected bool ProcessGenericFilters(float dt, SDayZPlayerAimingModel model, int stanceIndex)
 	{
 		if (!ShouldFreezeHoldBreathSway())
 		{
+			if (m_GGHoldBreathFreezeActive)
+			{
+				GGDebug.State(6, "HOLD_BREATH", "freeze", "inactive", "Hold-breath sway freeze released");
+				GGDebug.ClientState(6, "HOLD_BREATH", "freeze", "inactive", "Hold-breath sway freeze released");
+			}
 			m_GGHoldBreathFreezeActive = false;
 			return super.ProcessAimFilters(dt, model, stanceIndex);
 		}
@@ -55,6 +73,9 @@ modded class DayZPlayerImplementAiming
 			m_GGHoldBreathFreezeX = model.m_fAimXHandsOffset;
 			m_GGHoldBreathFreezeY = model.m_fAimYHandsOffset;
 			m_GGHoldBreathFreezeActive = true;
+			string freezeMessage = "Hold-breath sway frozen at current aim point. x=" + m_GGHoldBreathFreezeX.ToString() + " y=" + m_GGHoldBreathFreezeY.ToString();
+			GGDebug.State(6, "HOLD_BREATH", "freeze", "active", freezeMessage);
+			GGDebug.ClientState(6, "HOLD_BREATH", "freeze", "active", freezeMessage);
 			return firstResult;
 		}
 

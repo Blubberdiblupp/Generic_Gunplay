@@ -197,7 +197,10 @@ class GGLegacyMigration
 			settings.EnableExpansionMarketStats = highest.EnableExpansionMarketStats;
 			settings.EnableHipFireAlignment = highest.EnableHipFireNerf;
 			settings.EnableWeaponGeometryDamage = highest.EnableWeaponGeometryDamage;
-			settings.DebugMode = highest.DebugMode;
+			if (highest.DebugMode)
+				settings.DebugMode = 1;
+			else
+				settings.DebugMode = 0;
 			settings.GlobalRecoilMultiplier = SafeMultiplier(highest.GlobalRecoilMultiplier);
 			settings.GlobalSwayMultiplier = SafeMultiplier(highest.GlobalSwayMultiplier);
 			settings.GlobalAimSpeedMultiplier = SafeMultiplier(highest.GlobalAimSpeedMultiplier);

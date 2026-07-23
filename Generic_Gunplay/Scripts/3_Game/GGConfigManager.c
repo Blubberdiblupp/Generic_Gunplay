@@ -4,6 +4,7 @@ class GGConfigManager
 	protected ref GGItemsConfig m_Items;
 	protected ref GGWeaponAttachmentsFile m_WeaponAttachments;
 	protected ref GGClientSettings m_ClientSettings;
+	protected ref GGStatVisibility m_EffectiveVisibleStats;
 	protected ref array<ref GGBlockedAttachmentRule> m_SyncedBlockedAttachments;
 	protected ref map<string, ref GGTierDefinition> m_Tiers;
 	protected ref map<string, ref GGWeaponConfig> m_Weapons;
@@ -23,6 +24,7 @@ class GGConfigManager
 		m_Items = new GGItemsConfig();
 		m_WeaponAttachments = new GGWeaponAttachmentsFile();
 		m_ClientSettings = new GGClientSettings();
+		m_EffectiveVisibleStats = new GGStatVisibility();
 		m_SyncedBlockedAttachments = new array<ref GGBlockedAttachmentRule>;
 		m_Tiers = new map<string, ref GGTierDefinition>;
 		m_Weapons = new map<string, ref GGWeaponConfig>;
@@ -36,7 +38,7 @@ class GGConfigManager
 	void EnsureReady()
 	{
 		if (m_Ready || m_Loading || m_LoadError || !g_Game) return;
-		if (g_Game.IsServer()) LoadServerConfig();
+		if (g_Game.IsDedicatedServer()) LoadServerConfig();
 		else InitializeClient();
 	}
 
@@ -46,7 +48,7 @@ class GGConfigManager
 		if (m_Loading) return;
 		if (m_LoadError) return;
 		if (!g_Game) return;
-		if (!g_Game.IsServer()) return;
+		if (!g_Game.IsDedicatedServer()) return;
 		GGNetworkSync.InvalidateServerCache();
 		m_Loading = true;
 		m_LoadError = false;
@@ -77,6 +79,18 @@ class GGConfigManager
 		}
 
 		m_Settings.EnsureValid();
+		GGDebug.Configure(m_Settings.DebugMode);
+		string settingsDebug = "Settings loaded. ConfigVersion=" + m_Settings.ConfigVersion.ToString();
+		settingsDebug += " CrosshairMode=" + m_Settings.CrosshairMode.ToString();
+		settingsDebug += " AutoDiscover=" + GGDebug.BoolString(m_Settings.AutoDiscoverNewItems);
+		settingsDebug += " PreserveMissing=" + GGDebug.BoolString(m_Settings.PreserveMissingItems);
+		GGDebug.Log(2, "CONFIG", settingsDebug);
+		string multiplierDebug = "Global multipliers: recoil=" + m_Settings.GlobalRecoilMultiplier.ToString();
+		multiplierDebug += " sway=" + m_Settings.GlobalSwayMultiplier.ToString();
+		multiplierDebug += " ADS=" + m_Settings.GlobalAimSpeedMultiplier.ToString();
+		multiplierDebug += " hipfire=" + m_Settings.GlobalHipFireMultiplier.ToString();
+		multiplierDebug += " precision=" + m_Settings.GlobalPrecisionMultiplier.ToString();
+		GGDebug.Log(2, "CONFIG", multiplierDebug);
 		m_Items.EnsureArrays();
 		m_WeaponAttachments.EnsureArrays();
 		CompactItems();
@@ -92,7 +106,10 @@ class GGConfigManager
 			GGLegacyMigration.Import(m_Settings, m_Items);
 			m_Settings.LegacyImportCompleted = true;
 		}
+		m_Settings.EnsureValid();
+		GGDebug.Configure(m_Settings.DebugMode);
 
+		ApplyHighCapMagazineThreshold();
 		ValidateItems();
 		CompactWeaponAttachmentPolicies();
 		BuildCaches();
@@ -111,8 +128,9 @@ class GGConfigManager
 
 	void InitializeClient()
 	{
-		if (m_Ready || m_Loading || !g_Game || g_Game.IsServer()) return;
+		if (m_Ready || m_Loading || !g_Game || g_Game.IsDedicatedServer()) return;
 		m_Loading = true;
+		GGDebug.Configure(0);
 		if (!FileExist(GGConstants.CONFIG_DIR)) MakeDirectory(GGConstants.CONFIG_DIR);
 		string error;
 		if (FileExist(GGConstants.CLIENT_FILE))
@@ -120,29 +138,28 @@ class GGConfigManager
 			if (!JsonFileLoader<GGClientSettings>.LoadFile(GGConstants.CLIENT_FILE, m_ClientSettings, error))
 				GGUtil.Warning("Client.json is invalid; defaults are used. " + error);
 		}
-		else
-		{
-			JsonFileLoader<GGClientSettings>.SaveFile(GGConstants.CLIENT_FILE, m_ClientSettings, error);
-		}
-		m_ClientSettings.CrosshairMode = Math.Clamp(m_ClientSettings.CrosshairMode, 0, 2);
+		m_ClientSettings.Normalize();
+		JsonFileLoader<GGClientSettings>.SaveFile(GGConstants.CLIENT_FILE, m_ClientSettings, error);
 		BuildCaches();
 		m_Ready = true;
 		m_Loading = false;
 	}
 
-	void ApplySyncedPayload(GGSyncPayload payload)
+	bool ApplySyncedPayload(GGSyncPayload payload)
 	{
-		if (!payload || payload.ProtocolVersion != GGConstants.SYNC_PROTOCOL_VERSION || !payload.Settings || !payload.Items)
+		if (!ValidateSyncedPayload(payload))
 		{
-			GGUtil.Error("Rejected invalid synchronized config payload.");
-			return;
+			GGUtil.Error("Rejected synchronized config payload with missing or zero gameplay values.");
+			return false;
 		}
+
 		m_Settings = payload.Settings;
 		m_Items = payload.Items;
 		m_SyncedBlockedAttachments = payload.BlockedAttachments;
 		if (!m_SyncedBlockedAttachments)
 			m_SyncedBlockedAttachments = new array<ref GGBlockedAttachmentRule>;
 		m_Settings.EnsureValid();
+		GGDebug.Configure(m_Settings.DebugMode);
 		m_Items.EnsureArrays();
 		CompactItems();
 		ValidateItems();
@@ -154,6 +171,8 @@ class GGConfigManager
 		itemCount += m_Items.Ammunition.Count();
 		itemCount += m_Items.Armor.Count();
 		GGUtil.Log("Server config synchronized to client. Items=" + itemCount.ToString() + ".");
+		GGDebug.ClientOnce(3, "SYNC", "config_applied_" + m_RuntimeRevision.ToString(), "Server config activated. Items=" + itemCount.ToString() + " revision=" + m_RuntimeRevision.ToString());
+		return true;
 	}
 
 	GGSyncPayload CreateSyncPayload()
@@ -203,12 +222,78 @@ class GGConfigManager
 		return m_LoadError;
 	}
 
+	GGClientSettings GetClientSettings()
+	{
+		EnsureReady();
+		return m_ClientSettings;
+	}
+
+	void SaveClientSettings()
+	{
+		if (!g_Game || g_Game.IsDedicatedServer() || !m_ClientSettings) return;
+		m_ClientSettings.Normalize();
+		if (!FileExist(GGConstants.CONFIG_DIR)) MakeDirectory(GGConstants.CONFIG_DIR);
+		string error;
+		if (!JsonFileLoader<GGClientSettings>.SaveFile(GGConstants.CLIENT_FILE, m_ClientSettings, error))
+			GGUtil.Error("Could not save Client.json: " + error);
+	}
+
+	GGStatVisibility GetEffectiveVisibleStats()
+	{
+		EnsureReady();
+		if (!m_EffectiveVisibleStats) m_EffectiveVisibleStats = new GGStatVisibility();
+		if (!m_Settings || !m_Settings.VisibleStats) return m_EffectiveVisibleStats;
+
+		GGStatVisibility serverVisible = m_Settings.VisibleStats;
+		GGStatVisibility clientVisible;
+		if (m_ClientSettings)
+			clientVisible = m_ClientSettings.VisibleStats;
+
+		m_EffectiveVisibleStats.Recoil = serverVisible.Recoil && (!clientVisible || clientVisible.Recoil);
+		m_EffectiveVisibleStats.Sway = serverVisible.Sway && (!clientVisible || clientVisible.Sway);
+		m_EffectiveVisibleStats.ADS = serverVisible.ADS && (!clientVisible || clientVisible.ADS);
+		m_EffectiveVisibleStats.Precision = serverVisible.Precision && (!clientVisible || clientVisible.Precision);
+		m_EffectiveVisibleStats.Dispersion = serverVisible.Dispersion && (!clientVisible || clientVisible.Dispersion);
+		m_EffectiveVisibleStats.HipFire = serverVisible.HipFire && (!clientVisible || clientVisible.HipFire);
+		m_EffectiveVisibleStats.RPM = serverVisible.RPM && (!clientVisible || clientVisible.RPM);
+		m_EffectiveVisibleStats.MuzzleVelocity = serverVisible.MuzzleVelocity && (!clientVisible || clientVisible.MuzzleVelocity);
+		m_EffectiveVisibleStats.MagazineCapacity = serverVisible.MagazineCapacity && (!clientVisible || clientVisible.MagazineCapacity);
+		m_EffectiveVisibleStats.AmmoBallistics = serverVisible.AmmoBallistics && (!clientVisible || clientVisible.AmmoBallistics);
+		m_EffectiveVisibleStats.AmmoDamage = serverVisible.AmmoDamage && (!clientVisible || clientVisible.AmmoDamage);
+		m_EffectiveVisibleStats.Armor = serverVisible.Armor && (!clientVisible || clientVisible.Armor);
+		return m_EffectiveVisibleStats;
+	}
+
 	int GetEffectiveCrosshairMode()
 	{
 		EnsureReady();
-		if (m_Settings.AllowClientCrosshairChoice && !g_Game.IsServer())
+		if (m_Settings.AllowClientCrosshairChoice && !g_Game.IsDedicatedServer())
 			return Math.Clamp(m_ClientSettings.CrosshairMode, 0, 2);
 		return Math.Clamp(m_Settings.CrosshairMode, 0, 2);
+	}
+
+	bool ShouldShowTooltipStats()
+	{
+		EnsureReady();
+		if (!m_Settings || !m_Settings.EnableTooltipStats) return false;
+		if (!g_Game || g_Game.IsDedicatedServer()) return true;
+		return m_ClientSettings && m_ClientSettings.ShowStats && m_ClientSettings.ShowTooltipStats;
+	}
+
+	bool ShouldShowInspectStats()
+	{
+		EnsureReady();
+		if (!m_Settings || !m_Settings.EnableInspectStats) return false;
+		if (!g_Game || g_Game.IsDedicatedServer()) return true;
+		return m_ClientSettings && m_ClientSettings.ShowStats && m_ClientSettings.ShowInspectStats;
+	}
+
+	bool ShouldShowExpansionMarketStats()
+	{
+		EnsureReady();
+		if (!m_Settings || !m_Settings.EnableExpansionMarketStats) return false;
+		if (!g_Game || g_Game.IsDedicatedServer()) return true;
+		return m_ClientSettings && m_ClientSettings.ShowStats && m_ClientSettings.ShowExpansionMarketStats;
 	}
 
 	GGTierDefinition GetTier(string tierKey)
@@ -504,6 +589,7 @@ class GGConfigManager
 
 	protected void BuildCaches()
 	{
+		int debugStarted = GGDebug.BeginTiming(9);
 		m_Tiers.Clear();
 		m_Weapons.Clear();
 		m_Attachments.Clear();
@@ -519,11 +605,21 @@ class GGConfigManager
 		foreach (GGArmorConfig armor : m_Items.Armor) if (armor) m_Armor.Set(GGUtil.Key(armor.ClassName), armor);
 		BuildBlockedAttachmentCache();
 		m_RuntimeRevision++;
+		string cacheDetails = "tiers=" + m_Tiers.Count().ToString();
+		cacheDetails += " weapons=" + m_Weapons.Count().ToString();
+		cacheDetails += " attachments=" + m_Attachments.Count().ToString();
+		cacheDetails += " magazines=" + m_Magazines.Count().ToString();
+		cacheDetails += " ammo=" + m_Ammo.Count().ToString();
+		cacheDetails += " armor=" + m_Armor.Count().ToString();
+		cacheDetails += " blockedPairs=" + m_BlockedAttachments.Count().ToString();
+		cacheDetails += " revision=" + m_RuntimeRevision.ToString();
+		GGDebug.Log(8, "CACHE", "Runtime caches rebuilt. " + cacheDetails);
+		GGDebug.EndTiming(9, "PERFORMANCE", "BuildCaches", debugStarted, cacheDetails);
 	}
 
 	protected void BuildBlockedAttachmentCache()
 	{
-		if (g_Game && g_Game.IsServer())
+		if (g_Game && g_Game.IsDedicatedServer())
 		{
 			if (!m_WeaponAttachments || !m_WeaponAttachments.Weapons) return;
 			foreach (GGWeaponAttachmentPolicy policy : m_WeaponAttachments.Weapons)
@@ -560,11 +656,26 @@ class GGConfigManager
 	{
 		GGItemsConfig loaded = new GGItemsConfig();
 		loaded.ConfigVersion = m_Items.ConfigVersion;
-		foreach (GGWeaponConfig weapon : m_Items.Weapons) if (weapon && weapon.IsCurrentlyLoaded) loaded.Weapons.Insert(weapon);
-		foreach (GGAttachmentConfig attachment : m_Items.Attachments) if (attachment && attachment.IsCurrentlyLoaded) loaded.Attachments.Insert(attachment);
-		foreach (GGMagazineConfig magazine : m_Items.Magazines) if (magazine && magazine.IsCurrentlyLoaded) loaded.Magazines.Insert(magazine);
-		foreach (GGAmmoConfig ammo : m_Items.Ammunition) if (ammo && ammo.IsCurrentlyLoaded) loaded.Ammunition.Insert(ammo);
-		foreach (GGArmorConfig armor : m_Items.Armor) if (armor && armor.IsCurrentlyLoaded) loaded.Armor.Insert(armor);
+		foreach (GGWeaponConfig weapon : m_Items.Weapons)
+		{
+			if (weapon && weapon.IsCurrentlyLoaded) loaded.Weapons.Insert(weapon);
+		}
+		foreach (GGAttachmentConfig attachment : m_Items.Attachments)
+		{
+			if (attachment && attachment.IsCurrentlyLoaded) loaded.Attachments.Insert(attachment);
+		}
+		foreach (GGMagazineConfig magazine : m_Items.Magazines)
+		{
+			if (magazine && magazine.IsCurrentlyLoaded) loaded.Magazines.Insert(magazine);
+		}
+		foreach (GGAmmoConfig ammo : m_Items.Ammunition)
+		{
+			if (ammo && ammo.IsCurrentlyLoaded) loaded.Ammunition.Insert(ammo);
+		}
+		foreach (GGArmorConfig armor : m_Items.Armor)
+		{
+			if (armor && armor.IsCurrentlyLoaded) loaded.Armor.Insert(armor);
+		}
 		return loaded;
 	}
 
@@ -582,6 +693,103 @@ class GGConfigManager
 			}
 		}
 		return blocked;
+	}
+
+	bool ValidateSyncedPayload(GGSyncPayload payload)
+	{
+		if (!payload || payload.ProtocolVersion != GGConstants.SYNC_PROTOCOL_VERSION) return false;
+		if (!payload.Settings || !payload.Items) return false;
+		if (!payload.Settings.VisibleStats || !payload.Settings.TierDefinitions) return false;
+		if (payload.Settings.GlobalRecoilMultiplier <= 0.0) return false;
+		if (payload.Settings.GlobalSwayMultiplier <= 0.0) return false;
+		if (payload.Settings.GlobalAimSpeedMultiplier <= 0.0) return false;
+		if (payload.Settings.GlobalHipFireMultiplier <= 0.0) return false;
+		if (payload.Settings.GlobalPrecisionMultiplier <= 0.0) return false;
+
+		foreach (GGTierDefinition definition : payload.Settings.TierDefinitions)
+		{
+			if (!definition) return false;
+			if (definition.TierKey == "") return false;
+			if (definition.Recoil <= 0.0) return false;
+			if (definition.Sway <= 0.0) return false;
+			if (definition.ADS <= 0.0) return false;
+			if (definition.Precision <= 0.0) return false;
+			if (definition.HipFire <= 0.0) return false;
+		}
+
+		GGItemsConfig items = payload.Items;
+		if (!items.Weapons) return false;
+		if (!items.Attachments) return false;
+		if (!items.Magazines) return false;
+		if (!items.Ammunition) return false;
+		if (!items.Armor) return false;
+		if (items.Weapons.Count() == 0) return false;
+		foreach (GGWeaponConfig weapon : items.Weapons)
+		{
+			if (!weapon) return false;
+			if (weapon.ClassName == "") return false;
+			if (!weapon.FireModes) return false;
+			if (weapon.DetectedWeightKg <= 0.0) return false;
+			if (weapon.DetectedLengthM <= 0.0) return false;
+			if (weapon.DetectedRecoil <= 0.0) return false;
+			if (weapon.DetectedSway <= 0.0) return false;
+			if (weapon.DetectedADSSpeed <= 0.0) return false;
+			if (weapon.DetectedPrecision <= 0.0) return false;
+			if (weapon.DetectedInitSpeedMultiplier <= 0.0) return false;
+			if (weapon.RecoilMultiplier <= 0.0) return false;
+			if (weapon.SwayMultiplier <= 0.0) return false;
+			if (weapon.ADSMultiplier <= 0.0) return false;
+			if (weapon.PrecisionMultiplier <= 0.0) return false;
+			if (weapon.HipFireMultiplier <= 0.0) return false;
+			foreach (GGFireModeConfig mode : weapon.FireModes)
+			{
+				if (!mode) return false;
+				if (mode.ModeName == "") return false;
+				if (mode.RecoilMultiplier <= 0.0) return false;
+				if (mode.SwayMultiplier <= 0.0) return false;
+				if (mode.ADSMultiplier <= 0.0) return false;
+				if (mode.PrecisionMultiplier <= 0.0) return false;
+				if (mode.HipFireMultiplier <= 0.0) return false;
+			}
+		}
+
+		foreach (GGAttachmentConfig attachment : items.Attachments)
+		{
+			if (!attachment) return false;
+			if (attachment.ClassName == "") return false;
+			if (attachment.TierKey == "") return false;
+			if (!attachment.UseCustomStats) continue;
+			if (attachment.Recoil <= 0.0) return false;
+			if (attachment.Sway <= 0.0) return false;
+			if (attachment.ADS <= 0.0) return false;
+			if (attachment.Precision <= 0.0) return false;
+			if (attachment.HipFire <= 0.0) return false;
+		}
+
+		foreach (GGMagazineConfig magazine : items.Magazines)
+		{
+			if (!magazine) return false;
+			if (magazine.ClassName == "") return false;
+			if (magazine.TierKey == "") return false;
+			if (!magazine.UseCustomStats) continue;
+			if (magazine.Recoil <= 0.0) return false;
+			if (magazine.Sway <= 0.0) return false;
+			if (magazine.ADS <= 0.0) return false;
+			if (magazine.Precision <= 0.0) return false;
+			if (magazine.HipFire <= 0.0) return false;
+		}
+
+		foreach (GGAmmoConfig ammo : items.Ammunition)
+		{
+			if (!ammo) return false;
+			if (ammo.ClassName == "") return false;
+		}
+		foreach (GGArmorConfig armor : items.Armor)
+		{
+			if (!armor) return false;
+			if (armor.ClassName == "") return false;
+		}
+		return true;
 	}
 
 	protected void ValidateItems()
@@ -652,6 +860,37 @@ class GGConfigManager
 			magazine.Precision = GGUtil.Clamp(magazine.Precision, 0.01, 5.0);
 			magazine.HipFire = GGUtil.Clamp(magazine.HipFire, 0.01, 5.0);
 		}
+	}
+
+	protected void ApplyHighCapMagazineThreshold()
+	{
+		if (!m_Settings || !m_Items || !m_Items.Magazines) return;
+		int highCapCount;
+		int standardCount;
+		int skippedCount;
+		foreach (GGMagazineConfig magazine : m_Items.Magazines)
+		{
+			if (!magazine || magazine.IsLooseAmmo || magazine.UseCustomStats)
+			{
+				skippedCount++;
+				continue;
+			}
+			if (magazine.DetectedCapacity > m_Settings.HighCapMagazineThreshold)
+			{
+				magazine.TierKey = "HighCap_Heavy";
+				highCapCount++;
+			}
+			else
+			{
+				magazine.TierKey = "StandardMag_Neutral";
+				standardCount++;
+			}
+		}
+		string highCapDebug = "High-cap threshold=" + m_Settings.HighCapMagazineThreshold.ToString();
+		highCapDebug += " highCap=" + highCapCount.ToString();
+		highCapDebug += " standard=" + standardCount.ToString();
+		highCapDebug += " skipped=" + skippedCount.ToString();
+		GGDebug.Log(4, "CLASSIFICATION", highCapDebug);
 	}
 
 	protected void CompactItems()

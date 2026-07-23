@@ -6,11 +6,29 @@ modded class MissionServer
 		if (g_Game && g_Game.IsServer())
 			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(GGLoadServerConfig, 250, false);
 	}
+
+	override void OnClientReadyEvent(PlayerIdentity identity, PlayerBase player)
+	{
+		super.OnClientReadyEvent(identity, player);
+		if (g_Game && g_Game.IsServer() && identity)
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(GGSendServerConfig, 750, false, identity);
+	}
+
+	override void OnClientDisconnectedEvent(PlayerIdentity identity, PlayerBase player, int logoutTime, bool authFailed)
+	{
+		GGNetworkSync.RemoveClient(identity);
+		super.OnClientDisconnectedEvent(identity, player, logoutTime, authFailed);
+	}
 }
 
 void GGLoadServerConfig()
 {
 	GetGGConfigManager().LoadServerConfig();
+}
+
+void GGSendServerConfig(PlayerIdentity identity)
+{
+	GGNetworkSync.SendToClient(identity);
 }
 
 modded class MissionGameplay
@@ -19,11 +37,12 @@ modded class MissionGameplay
 	{
 		super.OnMissionStart();
 		GetGGConfigManager().InitializeClient();
-		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(GGRequestServerConfig, 1000, false);
+		GGNetworkSync.BeginClientSync();
 	}
-}
 
-void GGRequestServerConfig()
-{
-	GGNetworkSync.RequestFromServer();
+	override void OnMissionFinish()
+	{
+		GGNetworkSync.StopClientSync();
+		super.OnMissionFinish();
+	}
 }

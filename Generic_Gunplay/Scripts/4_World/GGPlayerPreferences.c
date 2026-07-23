@@ -28,6 +28,7 @@ modded class PlayerBase
 				{
 					m_GGCrosshairPreference = Math.Clamp(preference.param1, 0, 2);
 					SetSynchDirty();
+					GGDebug.State(7, "CROSSHAIR", "preference_" + identity.GetId(), m_GGCrosshairPreference.ToString(), "Accepted crosshair preference from " + identity.GetName());
 				}
 			}
 			return;
@@ -40,7 +41,6 @@ modded class PlayerBase
 		GGSettings settings = GetGGConfigManager().GetSettings();
 		if (!settings) return 0;
 		if (!settings.AllowClientCrosshairChoice) return Math.Clamp(settings.CrosshairMode, 0, 2);
-		if (!g_Game.IsServer()) return GetGGConfigManager().GetEffectiveCrosshairMode();
 		if (m_GGCrosshairPreference >= 0) return Math.Clamp(m_GGCrosshairPreference, 0, 2);
 		return Math.Clamp(settings.CrosshairMode, 0, 2);
 	}

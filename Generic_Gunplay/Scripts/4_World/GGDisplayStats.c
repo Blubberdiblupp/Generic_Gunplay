@@ -1,14 +1,47 @@
+class GGDisplayStat
+{
+	static const int NONE = 0;
+	static const int RECOIL = 1;
+	static const int SWAY = 2;
+	static const int ADS = 3;
+	static const int PRECISION = 4;
+	static const int DISPERSION = 5;
+	static const int HIPFIRE = 6;
+	static const int RPM = 7;
+	static const int MUZZLE_VELOCITY = 8;
+	static const int MAGAZINE_CAPACITY = 9;
+	static const int AMMO_BALLISTICS = 10;
+	static const int AMMO_DAMAGE = 11;
+	static const int ARMOR = 12;
+}
+
 class GGDisplayLine : Managed
 {
 	string Label;
 	string Value;
 	int Color;
+	int Stat;
+	string SecondaryLabel;
+	string SecondaryValue;
+	int SecondaryColor;
+	int SecondaryStat;
 
-	void GGDisplayLine(string label = "", string value = "", int color = 0xFFFFFFFF)
+	void GGDisplayLine(string label = "", string value = "", int color = 0xFFFFFFFF, int stat = 0)
 	{
 		Label = label;
 		Value = value;
 		Color = color;
+		Stat = stat;
+		SecondaryColor = 0xFFFFFFFF;
+		SecondaryStat = GGDisplayStat.NONE;
+	}
+
+	void SetSecondary(string label, string value, int color, int stat)
+	{
+		SecondaryLabel = label;
+		SecondaryValue = value;
+		SecondaryColor = color;
+		SecondaryStat = stat;
 	}
 }
 
@@ -23,9 +56,17 @@ class GGDisplayData : Managed
 		Lines = new array<ref GGDisplayLine>;
 	}
 
-	void Add(string label, string value, int color = 0xFFFFFFFF)
+	void Add(string label, string value, int color = 0xFFFFFFFF, int stat = 0)
 	{
-		if (Lines.Count() < 8) Lines.Insert(new GGDisplayLine(label, value, color));
+		if (Lines.Count() < 8) Lines.Insert(new GGDisplayLine(label, value, color, stat));
+	}
+
+	void AddCombined(string label, string value, int color, int stat, string secondaryLabel, string secondaryValue, int secondaryColor, int secondaryStat)
+	{
+		if (Lines.Count() >= 8) return;
+		GGDisplayLine line = new GGDisplayLine(label, value, color, stat);
+		line.SetSecondary(secondaryLabel, secondaryValue, secondaryColor, secondaryStat);
+		Lines.Insert(line);
 	}
 }
 
@@ -39,7 +80,8 @@ class GGDisplayStats
 	{
 		GGConfigManager config = GetGGConfigManager();
 		GGSettings settings = config.GetSettings();
-		if (!settings) return null;
+		if (!settings || !settings.VisibleStats) return null;
+		GGStatVisibility visible = settings.VisibleStats;
 
 		string resolvedType = itemType;
 		if (item) resolvedType = item.GetType();
@@ -47,33 +89,33 @@ class GGDisplayStats
 
 		GGWeaponConfig weaponConfig = config.GetWeapon(resolvedType);
 		if (weaponConfig && settings.EnableWeaponStats)
-			return GetWeaponDisplay(Weapon_Base.Cast(item), weaponConfig, attachmentTypes, settings);
+			return GetWeaponDisplay(Weapon_Base.Cast(item), weaponConfig, attachmentTypes, settings, visible);
 
 		GGMagazineConfig magazineConfig = config.GetMagazine(resolvedType);
 		if (magazineConfig)
 		{
 			if (magazineConfig.IsLooseAmmo && settings.EnableAmmoStats)
-				return GetAmmoDisplay(config.GetAmmo(magazineConfig.AmmoClass), settings);
+				return GetAmmoDisplay(config.GetAmmo(magazineConfig.AmmoClass), settings, visible);
 			if (settings.EnableMagazineStats)
-				return GetMagazineDisplay(magazineConfig, settings);
+				return GetMagazineDisplay(magazineConfig, visible);
 		}
 
 		GGAttachmentConfig attachmentConfig = config.GetAttachment(resolvedType);
 		if (attachmentConfig && settings.EnableAttachmentStats)
-			return GetAttachmentDisplay(attachmentConfig, settings);
+			return GetAttachmentDisplay(attachmentConfig, visible);
 
 		GGArmorConfig armorConfig = config.GetArmor(resolvedType);
 		if (armorConfig && settings.EnableArmorStats)
-			return GetArmorDisplay(armorConfig, settings);
+			return GetArmorDisplay(armorConfig, settings, visible);
 
 		GGAmmoConfig ammoConfig = config.GetAmmo(resolvedType);
 		if (ammoConfig && settings.EnableAmmoStats)
-			return GetAmmoDisplay(ammoConfig, settings);
+			return GetAmmoDisplay(ammoConfig, settings, visible);
 
 		return null;
 	}
 
-	protected static GGDisplayData GetWeaponDisplay(Weapon_Base weapon, GGWeaponConfig weaponConfig, array<string> attachmentTypes, GGSettings settings)
+	protected static GGDisplayData GetWeaponDisplay(Weapon_Base weapon, GGWeaponConfig weaponConfig, array<string> attachmentTypes, GGSettings settings, GGStatVisibility visible)
 	{
 		GGResolvedWeaponStats stats;
 		if (weapon)
@@ -88,57 +130,67 @@ class GGDisplayStats
 		}
 		if (!stats) return null;
 
-		string title = "WEAPON";
-		if (stats.FireMode != "") title = title + " | " + stats.FireMode;
-		GGDisplayData data = new GGDisplayData(title);
-		GGStatVisibility visible = settings.VisibleStats;
-		if (visible.Recoil) AddMultiplier(data, "Recoil:", stats.Recoil, false);
-		if (visible.Sway) AddMultiplier(data, "Sway:", stats.EffectiveSway, false);
-		if (visible.ADS) data.Add("ADS time:", FormatSeconds(stats.ADS), GetDeltaColor(stats.ADS, true));
-		if (visible.Precision) AddMultiplier(data, "Aim stability:", stats.Precision, true);
-		if (visible.HipFire) AddMultiplier(data, "Hipfire:", stats.HipFire, false);
-
-		if (visible.RPM)
-		{
-			string modeSummary = BuildModeSummary(weaponConfig, settings, stats.FireMode);
-			if (modeSummary != "") data.Add("Fire mode RPM:", modeSummary);
-		}
-
+		GGDisplayData data = new GGDisplayData("Weapon Total");
+		if (visible.Recoil) AddMultiplier(data, "Recoil:", stats.Recoil, false, GGDisplayStat.RECOIL);
+		if (visible.Sway) AddMultiplier(data, "Sway:", stats.Sway, false, GGDisplayStat.SWAY);
+		if (visible.ADS) data.Add("ADS Time:", FormatSeconds(stats.ADS), GetDeltaColor(stats.ADS, true), GGDisplayStat.ADS);
+		if (visible.Precision) AddMultiplier(data, "Precision:", stats.Precision, true, GGDisplayStat.PRECISION);
+		if (visible.HipFire) AddMultiplier(data, "Hipfire:", stats.HipFire, false, GGDisplayStat.HIPFIRE);
 		if (visible.Dispersion)
 		{
 			string dispersion = GetDispersionText(weaponConfig, settings, stats.FireMode);
-			if (dispersion != "") data.Add("Dispersion:", dispersion);
+			if (dispersion != "") data.Add("Dispersion:", dispersion, COLOR_NEUTRAL, GGDisplayStat.DISPERSION);
 		}
 
+		int rpm;
+		string rpmText = "-";
+		if (visible.RPM)
+		{
+			rpm = GetHighestWeaponRPM(weaponConfig);
+			if (rpm > 0) rpmText = rpm.ToString();
+		}
+
+		int velocity;
+		string velocityText;
 		if (visible.MuzzleVelocity)
 		{
-			int velocity = GetWeaponMuzzleVelocity(weapon, weaponConfig, settings);
-			if (velocity > 0) data.Add("Muzzle velocity:", velocity.ToString() + " m/s");
+			velocity = GetWeaponMuzzleVelocity(weapon, weaponConfig, settings);
+			velocityText = velocity.ToString() + " m/s";
 		}
+
+		if (visible.RPM && visible.MuzzleVelocity)
+			data.AddCombined("RPM:", rpmText, COLOR_NEUTRAL, GGDisplayStat.RPM, "Velocity:", velocityText, COLOR_NEUTRAL, GGDisplayStat.MUZZLE_VELOCITY);
+		else if (visible.RPM)
+			data.Add("RPM:", rpmText, COLOR_NEUTRAL, GGDisplayStat.RPM);
+		else if (visible.MuzzleVelocity)
+			data.Add("Velocity:", velocityText, COLOR_NEUTRAL, GGDisplayStat.MUZZLE_VELOCITY);
 		return data;
 	}
 
-	protected static GGDisplayData GetAttachmentDisplay(GGAttachmentConfig attachment, GGSettings settings)
+	protected static GGDisplayData GetAttachmentDisplay(GGAttachmentConfig attachment, GGStatVisibility visible)
 	{
 		GGTierDefinition effect = GetGGConfigManager().GetAttachmentEffect(attachment.ClassName);
 		if (!effect) return null;
-		GGDisplayData data = new GGDisplayData(BuildTierTitle(attachment.Category, effect.Tier));
-		AddEffectLines(data, effect, settings.VisibleStats, false);
+		GGDisplayData data = new GGDisplayData(BuildTierTitle(effect.Category, effect.Tier));
+		AddEffectLines(data, effect, visible);
 		return data;
 	}
 
-	protected static GGDisplayData GetMagazineDisplay(GGMagazineConfig magazine, GGSettings settings)
+	protected static GGDisplayData GetMagazineDisplay(GGMagazineConfig magazine, GGStatVisibility visible)
 	{
 		GGTierDefinition effect = GetGGConfigManager().GetMagazineEffect(magazine.ClassName);
 		if (!effect) return null;
-		GGDisplayData data = new GGDisplayData(BuildTierTitle("MAGAZINE", effect.Tier));
-		if (settings.VisibleStats.MagazineCapacity)
-			data.Add("Capacity:", magazine.DetectedCapacity.ToString() + " rounds");
-		AddEffectLines(data, effect, settings.VisibleStats, false);
+		GGDisplayData data = new GGDisplayData(BuildTierTitle(effect.Category, effect.Tier));
+		if (visible.MagazineCapacity)
+			data.Add("Capacity:", magazine.DetectedCapacity.ToString() + " rnd", COLOR_NEUTRAL, GGDisplayStat.MAGAZINE_CAPACITY);
+		if (visible.Recoil) AddMultiplier(data, "Recoil:", effect.Recoil, false, GGDisplayStat.RECOIL);
+		if (visible.ADS) AddMultiplier(data, "ADS:", effect.ADS, true, GGDisplayStat.ADS);
+		if (visible.Sway) AddMultiplier(data, "Sway:", effect.Sway, false, GGDisplayStat.SWAY);
+		if (visible.HipFire) AddMultiplier(data, "Hipfire:", effect.HipFire, false, GGDisplayStat.HIPFIRE);
 		return data;
 	}
 
-	protected static GGDisplayData GetAmmoDisplay(GGAmmoConfig ammo, GGSettings settings)
+	protected static GGDisplayData GetAmmoDisplay(GGAmmoConfig ammo, GGSettings settings, GGStatVisibility visible)
 	{
 		if (!ammo) return null;
 		float initSpeed = ammo.DetectedInitSpeed;
@@ -150,75 +202,85 @@ class GGDisplayStats
 		float hit = ammo.DetectedHit;
 
 		GGDisplayData data = new GGDisplayData("AMMUNITION");
-		if (settings.VisibleStats.AmmoBallistics)
+		if (visible.AmmoBallistics)
 		{
-			if (initSpeed > 0.0) data.Add("Initial velocity:", Math.Round(initSpeed).ToString() + " m/s");
-			if (typicalSpeed > 0.0) data.Add("Typical speed:", Math.Round(typicalSpeed).ToString() + " m/s");
-			data.Add("Air friction:", FormatNumber(airFriction));
+			if (initSpeed > 0.0) data.Add("Initial velocity:", Math.Round(initSpeed).ToString() + " m/s", COLOR_NEUTRAL, GGDisplayStat.AMMO_BALLISTICS);
+			if (typicalSpeed > 0.0) data.Add("Typical speed:", Math.Round(typicalSpeed).ToString() + " m/s", COLOR_NEUTRAL, GGDisplayStat.AMMO_BALLISTICS);
+			data.Add("Air friction:", FormatNumber(airFriction), COLOR_NEUTRAL, GGDisplayStat.AMMO_BALLISTICS);
 		}
-		if (settings.VisibleStats.AmmoDamage)
+		if (visible.AmmoDamage)
 		{
-			data.Add("Health damage:", FormatNumber(healthDamage));
-			data.Add("Blood damage:", FormatNumber(bloodDamage));
-			data.Add("Shock damage:", FormatNumber(shockDamage));
-			if (hit > 0.0) data.Add("Legacy hit:", FormatNumber(hit));
+			data.Add("Health damage:", FormatNumber(healthDamage), COLOR_NEUTRAL, GGDisplayStat.AMMO_DAMAGE);
+			data.Add("Blood damage:", FormatNumber(bloodDamage), COLOR_NEUTRAL, GGDisplayStat.AMMO_DAMAGE);
+			data.Add("Shock damage:", FormatNumber(shockDamage), COLOR_NEUTRAL, GGDisplayStat.AMMO_DAMAGE);
+			if (hit > 0.0) data.Add("Legacy hit:", FormatNumber(hit), COLOR_NEUTRAL, GGDisplayStat.AMMO_DAMAGE);
 		}
 		return data;
 	}
 
-	protected static GGDisplayData GetArmorDisplay(GGArmorConfig armor, GGSettings settings)
+	protected static GGDisplayData GetArmorDisplay(GGArmorConfig armor, GGSettings settings, GGStatVisibility visible)
 	{
 		float projectile = armor.DetectedProjectileReduction;
 		float melee = armor.DetectedMeleeReduction;
 		float infected = armor.DetectedInfectedReduction;
 		float frag = armor.DetectedFragReduction;
 
-		GGDisplayData data = new GGDisplayData("ARMOR | " + GetArmorTier(projectile, settings));
-		if (settings.VisibleStats.Armor)
+		GGDisplayData data = new GGDisplayData(GetArmorTier(projectile, settings));
+		if (visible.Armor)
 		{
-			AddReduction(data, "Projectile:", projectile);
-			AddReduction(data, "Melee:", melee);
-			AddReduction(data, "Infected:", infected);
-			AddReduction(data, "Frag grenade:", frag);
+			AddReduction(data, "Projectile:", projectile, settings);
+			AddReduction(data, "Melee:", melee, settings);
+			AddReduction(data, "Infected:", infected, settings);
+			AddReduction(data, "Frag:", frag, settings);
 		}
 		return data;
 	}
 
-	protected static void AddEffectLines(GGDisplayData data, GGTierDefinition effect, GGStatVisibility visible, bool weapon)
+	protected static void AddEffectLines(GGDisplayData data, GGTierDefinition effect, GGStatVisibility visible)
 	{
-		if (visible.Recoil) AddMultiplier(data, "Recoil:", effect.Recoil, false);
-		if (visible.Sway) AddMultiplier(data, "Sway:", effect.Sway, false);
-		if (visible.ADS) AddMultiplier(data, "ADS speed:", effect.ADS, true);
-		if (visible.Precision) AddMultiplier(data, "Aim stability:", effect.Precision, true);
-		if (visible.HipFire) AddMultiplier(data, "Hipfire:", effect.HipFire, false);
+		if (visible.Recoil) AddMultiplier(data, "Recoil:", effect.Recoil, false, GGDisplayStat.RECOIL);
+		if (visible.Sway) AddMultiplier(data, "Sway:", effect.Sway, false, GGDisplayStat.SWAY);
+		if (visible.ADS) AddMultiplier(data, "ADS:", effect.ADS, true, GGDisplayStat.ADS);
+		if (visible.Precision) AddMultiplier(data, "Precision:", effect.Precision, true, GGDisplayStat.PRECISION);
+		if (visible.HipFire) AddMultiplier(data, "Hipfire:", effect.HipFire, false, GGDisplayStat.HIPFIRE);
 	}
 
-	protected static void AddMultiplier(GGDisplayData data, string label, float multiplier, bool higherIsBetter)
+	protected static void AddMultiplier(GGDisplayData data, string label, float multiplier, bool higherIsBetter, int stat)
 	{
-		data.Add(label, FormatDelta(multiplier), GetDeltaColor(multiplier, higherIsBetter));
+		data.Add(label, FormatDelta(multiplier), GetDeltaColor(multiplier, higherIsBetter), stat);
 	}
 
-	protected static void AddReduction(GGDisplayData data, string label, float reduction)
+	protected static void AddReduction(GGDisplayData data, string label, float reduction, GGSettings settings)
 	{
 		int color = COLOR_BAD;
-		if (reduction > 0.0) color = COLOR_GOOD;
-		data.Add(label, Math.Round(reduction).ToString() + "%", color);
+		if (reduction >= settings.ArmorTier2Minimum) color = COLOR_GOOD;
+		else if (reduction >= settings.ArmorTier1Minimum) color = COLOR_NEUTRAL;
+		data.Add(label, Math.Round(reduction).ToString() + "%", color, GGDisplayStat.ARMOR);
 	}
 
 	protected static string BuildTierTitle(string category, string tier)
 	{
-		string title = category;
-		title.ToUpper();
-		if (tier != "" && tier != "Neutral") title = title + " | " + tier;
-		return title;
+		return category + " " + tier;
 	}
 
 	protected static string GetArmorTier(float projectile, GGSettings settings)
 	{
-		if (projectile >= settings.ArmorTier3Minimum) return "T3";
-		if (projectile >= settings.ArmorTier2Minimum) return "T2";
-		if (projectile >= settings.ArmorTier1Minimum) return "T1";
-		return "T0";
+		if (projectile >= settings.ArmorTier3Minimum) return "Armor Tier 3";
+		if (projectile >= settings.ArmorTier2Minimum) return "Armor Tier 2";
+		if (projectile >= settings.ArmorTier1Minimum) return "Armor Tier 1";
+		return "Clothing 0";
+	}
+
+	protected static int GetHighestWeaponRPM(GGWeaponConfig weapon)
+	{
+		if (!weapon || !weapon.FireModes) return 0;
+		int highest;
+		foreach (GGFireModeConfig mode : weapon.FireModes)
+		{
+			if (!mode || mode.DetectedReloadTime <= 0.0) continue;
+			highest = Math.Max(highest, Math.Round(60.0 / mode.DetectedReloadTime));
+		}
+		return highest;
 	}
 
 	protected static string BuildModeSummary(GGWeaponConfig weapon, GGSettings settings, string selectedMode)
@@ -291,10 +353,9 @@ class GGDisplayStats
 		float ammoSpeed;
 		if (ammoType != "") ammoSpeed = GetAmmoInitSpeed(ammoType, settings);
 		if (ammoSpeed <= 0.0) ammoSpeed = GetBestCompatibleAmmoSpeed(weaponConfig.ClassName, settings);
-		if (ammoSpeed <= 0.0) return 0;
-
 		float weaponMultiplier = weaponConfig.DetectedInitSpeedMultiplier;
 		if (weaponMultiplier <= 0.0) weaponMultiplier = 1.0;
+		if (ammoSpeed <= 0.0) ammoSpeed = 900.0;
 		return Math.Round(ammoSpeed * weaponMultiplier);
 	}
 
@@ -327,16 +388,16 @@ class GGDisplayStats
 	protected static string FormatSeconds(float aimSpeed)
 	{
 		if (aimSpeed <= 0.05) aimSpeed = 1.0;
-		float seconds = GGUtil.Clamp(0.7 / aimSpeed, 0.15, 1.4);
-		return FormatNumber(seconds) + " s";
+		float seconds = 0.7 / aimSpeed;
+		return string.Format("%1s", Math.Round(seconds * 100.0) / 100.0);
 	}
 
 	protected static string FormatDelta(float multiplier)
 	{
 		if (Math.AbsFloat(multiplier - 1.0) < 0.001) return "0%";
 		int rounded = Math.Round((multiplier - 1.0) * 100.0);
-		if (rounded > 0) return "+" + rounded.ToString() + "%";
-		return rounded.ToString() + "%";
+		if (rounded > 0) return string.Format("+%1%%", rounded);
+		return string.Format("%1%%", rounded);
 	}
 
 	protected static string FormatNumber(float value)

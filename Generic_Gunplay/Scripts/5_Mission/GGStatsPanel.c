@@ -17,28 +17,48 @@ class GGStatsPanel : Managed
 			return false;
 		}
 
+		GGStatVisibility clientVisible = GetClientVisibleStats();
+		SetText("title_label", "Tier:", 0xFFAF9442);
 		SetText("title_value", data.Title, 0xFFFFFFFF);
-		for (int i = 0; i < 8; i++)
+		int visibleLineCount;
+		foreach (GGDisplayLine line : data.Lines)
 		{
-			string rowName = "line" + (i + 1).ToString();
+			if (!line) continue;
+			bool primaryVisible = IsLineVisible(line.Stat, clientVisible);
+			bool secondaryVisible = line.SecondaryStat != GGDisplayStat.NONE && IsLineVisible(line.SecondaryStat, clientVisible);
+			if (!primaryVisible && !secondaryVisible) continue;
+			if (visibleLineCount >= 8) break;
+
+			string rowName = "line" + (visibleLineCount + 1).ToString();
 			Widget row = m_Root.FindAnyWidget(rowName);
-			if (i < data.Lines.Count() && data.Lines[i])
+			if (row) row.Show(true);
+			if (primaryVisible)
 			{
-				if (row) row.Show(true);
-				SetText(rowName + "_label", data.Lines[i].Label, 0xFFAF9442);
-				SetText(rowName + "_value", data.Lines[i].Value, data.Lines[i].Color);
+				string displayValue = line.Value;
+				if (secondaryVisible)
+					displayValue += " | " + line.SecondaryLabel + " " + line.SecondaryValue;
+				SetText(rowName + "_label", line.Label, 0xFFAF9442);
+				SetText(rowName + "_value", displayValue, line.Color);
 			}
-			else if (row)
+			else
 			{
-				row.Show(false);
+				SetText(rowName + "_label", line.SecondaryLabel, 0xFFAF9442);
+				SetText(rowName + "_value", line.SecondaryValue, line.SecondaryColor);
 			}
+			visibleLineCount++;
 		}
-		float width;
-		float height;
-		m_Root.GetSize(width, height);
-		if (width >= 540.0) height = 42.0 + (data.Lines.Count() * 23.0);
-		else height = 38.0 + (data.Lines.Count() * 20.0);
-		m_Root.SetSize(width, height);
+
+		for (int i = visibleLineCount; i < 8; i++)
+		{
+			Widget unusedRow = m_Root.FindAnyWidget("line" + (i + 1).ToString());
+			if (unusedRow) unusedRow.Show(false);
+		}
+
+		if (visibleLineCount == 0)
+		{
+			m_Root.Show(false);
+			return false;
+		}
 
 		m_Root.Show(true);
 		return true;
@@ -55,5 +75,30 @@ class GGStatsPanel : Managed
 		if (!widget) return;
 		widget.SetText(value);
 		widget.SetColor(color);
+	}
+
+	protected GGStatVisibility GetClientVisibleStats()
+	{
+		GGClientSettings clientSettings = GetGGConfigManager().GetClientSettings();
+		if (!clientSettings) return null;
+		return clientSettings.VisibleStats;
+	}
+
+	protected bool IsLineVisible(int stat, GGStatVisibility clientVisible)
+	{
+		if (!clientVisible || stat == GGDisplayStat.NONE) return true;
+		if (stat == GGDisplayStat.RECOIL) return clientVisible.Recoil;
+		if (stat == GGDisplayStat.SWAY) return clientVisible.Sway;
+		if (stat == GGDisplayStat.ADS) return clientVisible.ADS;
+		if (stat == GGDisplayStat.PRECISION) return clientVisible.Precision;
+		if (stat == GGDisplayStat.DISPERSION) return clientVisible.Dispersion;
+		if (stat == GGDisplayStat.HIPFIRE) return clientVisible.HipFire;
+		if (stat == GGDisplayStat.RPM) return clientVisible.RPM;
+		if (stat == GGDisplayStat.MUZZLE_VELOCITY) return clientVisible.MuzzleVelocity;
+		if (stat == GGDisplayStat.MAGAZINE_CAPACITY) return clientVisible.MagazineCapacity;
+		if (stat == GGDisplayStat.AMMO_BALLISTICS) return clientVisible.AmmoBallistics;
+		if (stat == GGDisplayStat.AMMO_DAMAGE) return clientVisible.AmmoDamage;
+		if (stat == GGDisplayStat.ARMOR) return clientVisible.Armor;
+		return true;
 	}
 }

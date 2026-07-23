@@ -14,13 +14,20 @@ modded class ExpansionMarketMenu
 		super.UpdatePreview();
 		EnsureGGMarketPanel();
 		if (!m_GGMarketPanel) return;
-		GGSettings settings = GetGGConfigManager().GetSettings();
-		if (!settings || !settings.EnableExpansionMarketStats)
+		if (!GetGGConfigManager().ShouldShowExpansionMarketStats())
 		{
 			m_GGMarketPanel.Hide();
 			return;
 		}
-		m_GGMarketPanel.Apply(GGDisplayStats.GetDisplay(EntityAI.Cast(m_CurrentPreviewObject), GetGGMarketItemType(), GetGGMarketAttachmentTypes()));
+		string itemType = GetGGMarketItemType();
+		bool applied = m_GGMarketPanel.Apply(GGDisplayStats.GetDisplay(EntityAI.Cast(m_CurrentPreviewObject), itemType, GetGGMarketAttachmentTypes()));
+		if (GGDebug.Enabled(8))
+		{
+			string shown = GGDebug.BoolString(applied);
+			string message = "Expansion Market stat panel updated. item=" + itemType;
+			message += " shown=" + shown;
+			GGDebug.ClientState(8, "UI", "expansion_market", itemType + "|" + shown, message);
+		}
 	}
 
 	protected string GetGGMarketItemType()

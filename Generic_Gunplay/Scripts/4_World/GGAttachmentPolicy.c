@@ -22,7 +22,14 @@ class GGAttachmentPolicyRuntime
 	protected static bool AllowsAttachmentTree(Weapon_Base weapon, EntityAI attachment, int depth)
 	{
 		if (!weapon || !attachment) return true;
-		if (!GetGGConfigManager().IsAttachmentAllowed(weapon.GetType(), attachment.GetType())) return false;
+		if (!GetGGConfigManager().IsAttachmentAllowed(weapon.GetType(), attachment.GetType()))
+		{
+			string key = GGUtil.Key(weapon.GetType()) + "_" + GGUtil.Key(attachment.GetType());
+			string message = "Blocked attachment placement. weapon=" + weapon.GetType() + " attachment=" + attachment.GetType();
+			GGDebug.Once(8, "POLICY", key, message);
+			GGDebug.ClientOnce(8, "POLICY", key, message);
+			return false;
+		}
 		if (depth >= 32) return true;
 		int childCount = attachment.GetInventory().AttachmentCount();
 		for (int childIndex = 0; childIndex < childCount; childIndex++)

@@ -3,7 +3,7 @@ ImageWidgetClass GGExpansionMarketStats {
  clipchildren 0
  ignorepointer 1
  color 0 0 0 0.68
- size 500 198
+ size 394 117
  halign center_ref
  valign bottom_ref
  hexactpos 1
@@ -14,94 +14,66 @@ ImageWidgetClass GGExpansionMarketStats {
  mode blend
  {
   ImageWidgetClass title {
-   ignorepointer 1
-   color 0 0 0 0.94
-   position 7 6
-   size 486 22
-   hexactpos 1
-   vexactpos 1
-   hexactsize 1
-   vexactsize 1
-   mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 5 5 size 384 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass title_value {
-     ignorepointer 1
-     color 0.6863 0.5804 0.2588 1
-     position 6 0
-     size 474 22
-     hexactpos 1
-     vexactpos 1
-     hexactsize 1
-     vexactsize 1
-     text "GUNPLAY STATS"
-     font "gui/fonts/etelkatextpro14"
-     "text halign" center
-     "text valign" center
-    }
+    TextWidgetClass title_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 54 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "Tier:" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass title_value { ignorepointer 1 position 64 0 size 315 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line1 {
-   ignorepointer 1
-   color 0 0 0 0.92
-   position 7 32
-   size 486 18
-   hexactpos 1
-   vexactpos 1
-   hexactsize 1
-   vexactsize 1
-   mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 5 28 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line1_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line1_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line1_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 76 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line1_value { ignorepointer 1 position 84 0 size 98 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line2 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 52 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 202 28 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line2_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line2_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line2_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 76 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line2_value { ignorepointer 1 position 84 0 size 98 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line3 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 72 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 5 51 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line3_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line3_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line3_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 76 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line3_value { ignorepointer 1 position 84 0 size 98 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line4 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 92 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 202 51 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line4_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line4_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line4_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 82 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line4_value { ignorepointer 1 position 88 0 size 94 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line5 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 112 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 5 74 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line5_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line5_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line5_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 76 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line5_value { ignorepointer 1 position 84 0 size 98 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line6 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 132 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 202 74 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line6_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line6_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line6_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 82 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line6_value { ignorepointer 1 position 88 0 size 94 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line7 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 152 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 5 97 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line7_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line7_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line7_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 82 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line7_value { ignorepointer 1 position 88 0 size 94 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
   ImageWidgetClass line8 {
-   ignorepointer 1 color 0 0 0 0.92 position 7 172 size 486 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
+   visible 1 ignorepointer 1 color 0 0 0 0.92 position 202 97 size 187 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 mode blend
    {
-    TextWidgetClass line8_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 6 0 size 220 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
-    TextWidgetClass line8_value { ignorepointer 1 position 230 0 size 250 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
+    TextWidgetClass line8_label { ignorepointer 1 color 0.6863 0.5804 0.2588 1 position 5 0 size 82 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text valign" center }
+    TextWidgetClass line8_value { ignorepointer 1 position 88 0 size 94 18 hexactpos 1 vexactpos 1 hexactsize 1 vexactsize 1 text "-" font "gui/fonts/etelkatextpro14" "text halign" right "text valign" center }
    }
   }
  }

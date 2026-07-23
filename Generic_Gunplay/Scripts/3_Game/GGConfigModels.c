@@ -78,7 +78,7 @@ class GGSettings : Managed
 	bool PreserveMissingItems;
 	bool ImportLegacyConfigsOnFirstRun;
 	bool LegacyImportCompleted;
-	bool DebugMode;
+	int DebugMode;
 
 	float GlobalRecoilMultiplier;
 	float GlobalSwayMultiplier;
@@ -117,7 +117,7 @@ class GGSettings : Managed
 		PreserveMissingItems = true;
 		ImportLegacyConfigsOnFirstRun = true;
 		LegacyImportCompleted = false;
-		DebugMode = false;
+		DebugMode = 0;
 
 		GlobalRecoilMultiplier = 1.08;
 		GlobalSwayMultiplier = 1.08;
@@ -158,6 +158,9 @@ class GGSettings : Managed
 		int oldCrosshair = CrosshairMode;
 		CrosshairMode = Math.Clamp(CrosshairMode, 0, 2);
 		if (oldCrosshair != CrosshairMode) changed = true;
+		int oldDebugMode = DebugMode;
+		DebugMode = Math.Clamp(DebugMode, 0, 10);
+		if (oldDebugMode != DebugMode) changed = true;
 		GlobalRecoilMultiplier = GGUtil.Clamp(GlobalRecoilMultiplier, 0.01, 5.0);
 		GlobalSwayMultiplier = GGUtil.Clamp(GlobalSwayMultiplier, 0.01, 5.0);
 		GlobalAimSpeedMultiplier = GGUtil.Clamp(GlobalAimSpeedMultiplier, 0.01, 5.0);
@@ -566,11 +569,37 @@ class GGClientSettings : Managed
 {
 	int ConfigVersion;
 	int CrosshairMode;
+	int CrosshairColor;
+	int CrosshairStyle;
+	int CrosshairOpacity;
+	bool ShowStats;
+	bool ShowTooltipStats;
+	bool ShowInspectStats;
+	bool ShowExpansionMarketStats;
+	ref GGStatVisibility VisibleStats;
 
 	void GGClientSettings()
 	{
 		ConfigVersion = GGConstants.CONFIG_VERSION;
 		CrosshairMode = 1;
+		CrosshairColor = 0;
+		CrosshairStyle = 0;
+		CrosshairOpacity = 2;
+		ShowStats = true;
+		ShowTooltipStats = true;
+		ShowInspectStats = true;
+		ShowExpansionMarketStats = true;
+		VisibleStats = new GGStatVisibility();
+	}
+
+	void Normalize()
+	{
+		ConfigVersion = GGConstants.CONFIG_VERSION;
+		CrosshairMode = Math.Clamp(CrosshairMode, 0, 2);
+		CrosshairColor = Math.Clamp(CrosshairColor, 0, 5);
+		CrosshairStyle = Math.Clamp(CrosshairStyle, 0, 5);
+		CrosshairOpacity = Math.Clamp(CrosshairOpacity, 0, 3);
+		if (!VisibleStats) VisibleStats = new GGStatVisibility();
 	}
 }
 
@@ -587,5 +616,521 @@ class GGSyncPayload : Managed
 		Settings = new GGSettings();
 		Items = new GGItemsConfig();
 		BlockedAttachments = new array<ref GGBlockedAttachmentRule>;
+	}
+}
+
+class GGWireFireMode : Managed
+{
+	string N;
+	ref array<float> V;
+
+	void GGWireFireMode()
+	{
+		N = "";
+		V = new array<float>;
+	}
+
+	void Load(GGFireModeConfig source)
+	{
+		N = source.ModeName;
+		V.Clear();
+		V.Insert(source.DetectedReloadTime);
+		V.Insert(source.DetectedDispersion);
+		V.Insert(source.RecoilMultiplier);
+		V.Insert(source.SwayMultiplier);
+		V.Insert(source.ADSMultiplier);
+		V.Insert(source.PrecisionMultiplier);
+		V.Insert(source.HipFireMultiplier);
+	}
+
+	GGFireModeConfig Expand()
+	{
+		if (N == "" || !V || V.Count() != 7) return null;
+		GGFireModeConfig result = new GGFireModeConfig();
+		result.ModeName = N;
+		result.DetectedReloadTime = V.Get(0);
+		result.DetectedDispersion = V.Get(1);
+		result.RecoilMultiplier = V.Get(2);
+		result.SwayMultiplier = V.Get(3);
+		result.ADSMultiplier = V.Get(4);
+		result.PrecisionMultiplier = V.Get(5);
+		result.HipFireMultiplier = V.Get(6);
+		return result;
+	}
+}
+
+class GGWireWeapon : Managed
+{
+	string C;
+	string P;
+	ref array<float> V;
+	ref array<ref GGWireFireMode> F;
+	bool L;
+
+	void GGWireWeapon()
+	{
+		C = "";
+		P = "";
+		V = new array<float>;
+		F = new array<ref GGWireFireMode>;
+		L = true;
+	}
+
+	void Load(GGWeaponConfig source)
+	{
+		C = source.ClassName;
+		P = source.ParentClass;
+		L = source.IsCurrentlyLoaded;
+		V.Clear();
+		V.Insert(source.DetectedWeightKg);
+		V.Insert(source.DetectedLengthM);
+		V.Insert(source.DetectedRecoil);
+		V.Insert(source.DetectedSway);
+		V.Insert(source.DetectedADSSpeed);
+		V.Insert(source.DetectedPrecision);
+		V.Insert(source.DetectedInitSpeedMultiplier);
+		V.Insert(source.RecoilMultiplier);
+		V.Insert(source.SwayMultiplier);
+		V.Insert(source.ADSMultiplier);
+		V.Insert(source.PrecisionMultiplier);
+		V.Insert(source.HipFireMultiplier);
+		F.Clear();
+		foreach (GGFireModeConfig mode : source.FireModes)
+		{
+			if (!mode) continue;
+			GGWireFireMode wireMode = new GGWireFireMode();
+			wireMode.Load(mode);
+			F.Insert(wireMode);
+		}
+	}
+
+	GGWeaponConfig Expand()
+	{
+		if (C == "" || !V) return null;
+		if (V.Count() != 12 || !F) return null;
+		GGWeaponConfig result = new GGWeaponConfig();
+		result.ClassName = C;
+		result.ParentClass = P;
+		result.DetectedWeightKg = V.Get(0);
+		result.DetectedLengthM = V.Get(1);
+		result.DetectedRecoil = V.Get(2);
+		result.DetectedSway = V.Get(3);
+		result.DetectedADSSpeed = V.Get(4);
+		result.DetectedPrecision = V.Get(5);
+		result.DetectedInitSpeedMultiplier = V.Get(6);
+		result.RecoilMultiplier = V.Get(7);
+		result.SwayMultiplier = V.Get(8);
+		result.ADSMultiplier = V.Get(9);
+		result.PrecisionMultiplier = V.Get(10);
+		result.HipFireMultiplier = V.Get(11);
+		result.IsCurrentlyLoaded = L;
+		result.FireModes.Clear();
+		foreach (GGWireFireMode wireMode : F)
+		{
+			if (!wireMode) return null;
+			GGFireModeConfig mode = wireMode.Expand();
+			if (!mode) return null;
+			result.FireModes.Insert(mode);
+		}
+		return result;
+	}
+}
+
+class GGWireAttachment : Managed
+{
+	string C;
+	string P;
+	string G;
+	string K;
+	string L;
+	bool U;
+	ref array<float> V;
+	ref array<string> S;
+	bool N;
+	bool I;
+
+	void GGWireAttachment()
+	{
+		C = "";
+		P = "";
+		G = "";
+		K = "";
+		L = "";
+		V = new array<float>;
+		S = new array<string>;
+		I = true;
+	}
+
+	void Load(GGAttachmentConfig source)
+	{
+		C = source.ClassName;
+		P = source.ParentClass;
+		G = source.Category;
+		K = source.TierKey;
+		L = source.CustomTierLabel;
+		U = source.UseCustomStats;
+		N = source.NeedsReview;
+		I = source.IsCurrentlyLoaded;
+		V.Clear();
+		V.Insert(source.Recoil);
+		V.Insert(source.Sway);
+		V.Insert(source.ADS);
+		V.Insert(source.Precision);
+		V.Insert(source.HipFire);
+		S.Clear();
+		foreach (string slot : source.DetectedSlots) S.Insert(slot);
+	}
+
+	GGAttachmentConfig Expand()
+	{
+		if (C == "" || K == "") return null;
+		if (!V || V.Count() != 5) return null;
+		if (!S) return null;
+		GGAttachmentConfig result = new GGAttachmentConfig();
+		result.ClassName = C;
+		result.ParentClass = P;
+		result.Category = G;
+		result.TierKey = K;
+		result.CustomTierLabel = L;
+		result.UseCustomStats = U;
+		result.Recoil = V.Get(0);
+		result.Sway = V.Get(1);
+		result.ADS = V.Get(2);
+		result.Precision = V.Get(3);
+		result.HipFire = V.Get(4);
+		result.NeedsReview = N;
+		result.IsCurrentlyLoaded = I;
+		result.DetectedSlots.Clear();
+		foreach (string slot : S) result.DetectedSlots.Insert(slot);
+		return result;
+	}
+}
+
+class GGWireMagazine : Managed
+{
+	string C;
+	string P;
+	string A;
+	int N;
+	bool O;
+	string K;
+	string L;
+	bool U;
+	ref array<float> V;
+	bool I;
+
+	void GGWireMagazine()
+	{
+		C = "";
+		P = "";
+		A = "";
+		K = "";
+		L = "";
+		V = new array<float>;
+		I = true;
+	}
+
+	void Load(GGMagazineConfig source)
+	{
+		C = source.ClassName;
+		P = source.ParentClass;
+		A = source.AmmoClass;
+		N = source.DetectedCapacity;
+		O = source.IsLooseAmmo;
+		K = source.TierKey;
+		L = source.CustomTierLabel;
+		U = source.UseCustomStats;
+		I = source.IsCurrentlyLoaded;
+		V.Clear();
+		V.Insert(source.Recoil);
+		V.Insert(source.Sway);
+		V.Insert(source.ADS);
+		V.Insert(source.Precision);
+		V.Insert(source.HipFire);
+	}
+
+	GGMagazineConfig Expand()
+	{
+		if (C == "" || K == "") return null;
+		if (!V || V.Count() != 5) return null;
+		GGMagazineConfig result = new GGMagazineConfig();
+		result.ClassName = C;
+		result.ParentClass = P;
+		result.AmmoClass = A;
+		result.DetectedCapacity = N;
+		result.IsLooseAmmo = O;
+		result.TierKey = K;
+		result.CustomTierLabel = L;
+		result.UseCustomStats = U;
+		result.Recoil = V.Get(0);
+		result.Sway = V.Get(1);
+		result.ADS = V.Get(2);
+		result.Precision = V.Get(3);
+		result.HipFire = V.Get(4);
+		result.IsCurrentlyLoaded = I;
+		return result;
+	}
+}
+
+class GGWireAmmo : Managed
+{
+	string C;
+	string P;
+	ref array<float> V;
+	bool I;
+
+	void GGWireAmmo()
+	{
+		C = "";
+		P = "";
+		V = new array<float>;
+		I = true;
+	}
+
+	void Load(GGAmmoConfig source)
+	{
+		C = source.ClassName;
+		P = source.ParentClass;
+		I = source.IsCurrentlyLoaded;
+		V.Clear();
+		V.Insert(source.DetectedInitSpeed);
+		V.Insert(source.DetectedTypicalSpeed);
+		V.Insert(source.DetectedAirFriction);
+		V.Insert(source.DetectedHit);
+		V.Insert(source.DetectedIndirectHit);
+		V.Insert(source.DetectedHealthDamage);
+		V.Insert(source.DetectedBloodDamage);
+		V.Insert(source.DetectedShockDamage);
+	}
+
+	GGAmmoConfig Expand()
+	{
+		if (C == "" || !V || V.Count() != 8) return null;
+		GGAmmoConfig result = new GGAmmoConfig();
+		result.ClassName = C;
+		result.ParentClass = P;
+		result.DetectedInitSpeed = V.Get(0);
+		result.DetectedTypicalSpeed = V.Get(1);
+		result.DetectedAirFriction = V.Get(2);
+		result.DetectedHit = V.Get(3);
+		result.DetectedIndirectHit = V.Get(4);
+		result.DetectedHealthDamage = V.Get(5);
+		result.DetectedBloodDamage = V.Get(6);
+		result.DetectedShockDamage = V.Get(7);
+		result.IsCurrentlyLoaded = I;
+		return result;
+	}
+}
+
+class GGWireArmor : Managed
+{
+	string C;
+	string P;
+	ref array<float> V;
+	bool I;
+
+	void GGWireArmor()
+	{
+		C = "";
+		P = "";
+		V = new array<float>;
+		I = true;
+	}
+
+	void Load(GGArmorConfig source)
+	{
+		C = source.ClassName;
+		P = source.ParentClass;
+		I = source.IsCurrentlyLoaded;
+		V.Clear();
+		V.Insert(source.DetectedProjectileReduction);
+		V.Insert(source.DetectedMeleeReduction);
+		V.Insert(source.DetectedInfectedReduction);
+		V.Insert(source.DetectedFragReduction);
+	}
+
+	GGArmorConfig Expand()
+	{
+		if (C == "" || !V || V.Count() != 4) return null;
+		GGArmorConfig result = new GGArmorConfig();
+		result.ClassName = C;
+		result.ParentClass = P;
+		result.DetectedProjectileReduction = V.Get(0);
+		result.DetectedMeleeReduction = V.Get(1);
+		result.DetectedInfectedReduction = V.Get(2);
+		result.DetectedFragReduction = V.Get(3);
+		result.IsCurrentlyLoaded = I;
+		return result;
+	}
+}
+
+class GGWireBlockedAttachment : Managed
+{
+	string W;
+	string A;
+
+	void Load(GGBlockedAttachmentRule source)
+	{
+		W = source.WeaponClassName;
+		A = source.AttachmentClassName;
+	}
+
+	GGBlockedAttachmentRule Expand()
+	{
+		if (W == "" || A == "") return null;
+		GGBlockedAttachmentRule result = new GGBlockedAttachmentRule();
+		result.WeaponClassName = W;
+		result.AttachmentClassName = A;
+		return result;
+	}
+}
+
+class GGWireSyncPayload : Managed
+{
+	int P;
+	int I;
+	ref GGSettings S;
+	ref array<ref GGWireWeapon> W;
+	ref array<ref GGWireAttachment> A;
+	ref array<ref GGWireMagazine> M;
+	ref array<ref GGWireAmmo> U;
+	ref array<ref GGWireArmor> R;
+	ref array<ref GGWireBlockedAttachment> B;
+
+	void GGWireSyncPayload()
+	{
+		P = GGConstants.SYNC_PROTOCOL_VERSION;
+		I = GGConstants.CONFIG_VERSION;
+		S = new GGSettings();
+		W = new array<ref GGWireWeapon>;
+		A = new array<ref GGWireAttachment>;
+		M = new array<ref GGWireMagazine>;
+		U = new array<ref GGWireAmmo>;
+		R = new array<ref GGWireArmor>;
+		B = new array<ref GGWireBlockedAttachment>;
+	}
+
+	bool Load(GGSyncPayload source)
+	{
+		if (!source || !source.Settings || !source.Items) return false;
+		if (!source.BlockedAttachments) return false;
+		P = source.ProtocolVersion;
+		I = source.Items.ConfigVersion;
+		S = source.Settings;
+		W.Clear();
+		A.Clear();
+		M.Clear();
+		U.Clear();
+		R.Clear();
+		B.Clear();
+
+		foreach (GGWeaponConfig weapon : source.Items.Weapons)
+		{
+			if (!weapon) return false;
+			GGWireWeapon wireWeapon = new GGWireWeapon();
+			wireWeapon.Load(weapon);
+			W.Insert(wireWeapon);
+		}
+		foreach (GGAttachmentConfig attachment : source.Items.Attachments)
+		{
+			if (!attachment) return false;
+			GGWireAttachment wireAttachment = new GGWireAttachment();
+			wireAttachment.Load(attachment);
+			A.Insert(wireAttachment);
+		}
+		foreach (GGMagazineConfig magazine : source.Items.Magazines)
+		{
+			if (!magazine) return false;
+			GGWireMagazine wireMagazine = new GGWireMagazine();
+			wireMagazine.Load(magazine);
+			M.Insert(wireMagazine);
+		}
+		foreach (GGAmmoConfig ammo : source.Items.Ammunition)
+		{
+			if (!ammo) return false;
+			GGWireAmmo wireAmmo = new GGWireAmmo();
+			wireAmmo.Load(ammo);
+			U.Insert(wireAmmo);
+		}
+		foreach (GGArmorConfig armor : source.Items.Armor)
+		{
+			if (!armor) return false;
+			GGWireArmor wireArmor = new GGWireArmor();
+			wireArmor.Load(armor);
+			R.Insert(wireArmor);
+		}
+		foreach (GGBlockedAttachmentRule blocked : source.BlockedAttachments)
+		{
+			if (!blocked) return false;
+			GGWireBlockedAttachment wireBlocked = new GGWireBlockedAttachment();
+			wireBlocked.Load(blocked);
+			B.Insert(wireBlocked);
+		}
+		return true;
+	}
+
+	bool Expand(out GGSyncPayload payload)
+	{
+		payload = null;
+		if (P != GGConstants.SYNC_PROTOCOL_VERSION || !S) return false;
+		if (!W || !A || !M) return false;
+		if (!U || !R || !B) return false;
+
+		GGSyncPayload result = new GGSyncPayload();
+		result.ProtocolVersion = P;
+		result.Settings = S;
+		result.Items.ConfigVersion = I;
+		result.Items.Weapons.Clear();
+		result.Items.Attachments.Clear();
+		result.Items.Magazines.Clear();
+		result.Items.Ammunition.Clear();
+		result.Items.Armor.Clear();
+		result.BlockedAttachments.Clear();
+
+		foreach (GGWireWeapon wireWeapon : W)
+		{
+			if (!wireWeapon) return false;
+			GGWeaponConfig weapon = wireWeapon.Expand();
+			if (!weapon) return false;
+			result.Items.Weapons.Insert(weapon);
+		}
+		foreach (GGWireAttachment wireAttachment : A)
+		{
+			if (!wireAttachment) return false;
+			GGAttachmentConfig attachment = wireAttachment.Expand();
+			if (!attachment) return false;
+			result.Items.Attachments.Insert(attachment);
+		}
+		foreach (GGWireMagazine wireMagazine : M)
+		{
+			if (!wireMagazine) return false;
+			GGMagazineConfig magazine = wireMagazine.Expand();
+			if (!magazine) return false;
+			result.Items.Magazines.Insert(magazine);
+		}
+		foreach (GGWireAmmo wireAmmo : U)
+		{
+			if (!wireAmmo) return false;
+			GGAmmoConfig ammo = wireAmmo.Expand();
+			if (!ammo) return false;
+			result.Items.Ammunition.Insert(ammo);
+		}
+		foreach (GGWireArmor wireArmor : R)
+		{
+			if (!wireArmor) return false;
+			GGArmorConfig armor = wireArmor.Expand();
+			if (!armor) return false;
+			result.Items.Armor.Insert(armor);
+		}
+		foreach (GGWireBlockedAttachment wireBlocked : B)
+		{
+			if (!wireBlocked) return false;
+			GGBlockedAttachmentRule blocked = wireBlocked.Expand();
+			if (!blocked) return false;
+			result.BlockedAttachments.Insert(blocked);
+		}
+
+		payload = result;
+		return true;
 	}
 }

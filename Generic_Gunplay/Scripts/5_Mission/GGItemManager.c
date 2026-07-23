@@ -16,12 +16,18 @@ modded class ItemManager
 	{
 		super.PrepareTooltip(item, x, y);
 		if (!m_GGTooltipPanel) return;
-		GGSettings settings = GetGGConfigManager().GetSettings();
-		if (!settings || !settings.EnableTooltipStats || !item)
+		if (!GetGGConfigManager().ShouldShowTooltipStats() || !item)
 		{
 			m_GGTooltipPanel.Hide();
 			return;
 		}
-		m_GGTooltipPanel.Apply(GGDisplayStats.GetDisplay(item));
+		bool applied = m_GGTooltipPanel.Apply(GGDisplayStats.GetDisplay(item));
+		if (GGDebug.Enabled(8))
+		{
+			string shown = GGDebug.BoolString(applied);
+			string message = "Tooltip stat panel updated. item=" + item.GetType();
+			message += " shown=" + shown;
+			GGDebug.ClientState(8, "UI", "tooltip", item.GetType() + "|" + shown, message);
+		}
 	}
 }

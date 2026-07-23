@@ -10,6 +10,8 @@ modded class DayZPlayerCameraOptics
 
 		int delay = weapon.GetGGOpticEnterDelay();
 		int ppDelay = Math.Max(0, delay - 100);
+		string cameraMessage = "Optics camera activated. weapon=" + weapon.GetType() + " delayMs=" + delay.ToString() + " postProcessDelayMs=" + ppDelay.ToString();
+		GGDebug.ClientState(7, "OPTICS", "camera", weapon.GetType() + "|" + delay.ToString(), cameraMessage);
 		GetGame().GetCallQueue(CALL_CATEGORY_GUI).Remove(player.HideClothing);
 		GetGame().GetCallQueue(CALL_CATEGORY_GUI).Remove(SetCameraPP);
 		GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(SetCameraPP, ppDelay, false, true, this);

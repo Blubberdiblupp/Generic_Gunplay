@@ -48,8 +48,11 @@ class GGHipFireCrosshair : Managed
 	protected const float PROJECT_DISTANCE = 100.0;
 	protected const float SMOOTHNESS = 0.035;
 	protected const float RAYCAST_INTERVAL = 0.025;
+	protected const int STYLE_COUNT = 6;
 
-	protected Widget m_Root;
+	protected ref array<Widget> m_StyleLayouts;
+	protected ref array<Widget> m_StyleRoots;
+	protected ref array<ImageWidget> m_StyleImages;
 	protected Widget m_DynamicRoot;
 	protected ImageWidget m_DynamicImage;
 	protected PlayerBase m_Player;
@@ -59,33 +62,52 @@ class GGHipFireCrosshair : Managed
 	protected float m_VelocityX[1];
 	protected float m_VelocityY[1];
 	protected float m_RaycastElapsed;
+	protected int m_AppliedColor = -1;
+	protected int m_AppliedOpacity = -1;
+	protected int m_AppliedStyle = -1;
+	protected float m_AppliedSize = -1.0;
 	protected bool m_HasPosition;
 	protected bool m_HasWorldPosition;
+	protected bool m_IsVisible;
 
 	void GGHipFireCrosshair()
 	{
-		m_Root = GetGame().GetWorkspace().CreateWidgets("Generic_Gunplay/GUI/layouts/GGHipFireCrosshair.layout");
-		if (!m_Root) return;
-		m_DynamicRoot = m_Root.FindAnyWidget("GGHipFireCrosshairRoot");
-		m_DynamicImage = ImageWidget.Cast(m_Root.FindAnyWidget("GGHipFireCrosshairImage"));
-		if (!m_DynamicImage) return;
-		m_DynamicImage.LoadImageFile(0, "set:dayz_crosshairs image:crossT_128x128");
-		m_DynamicImage.SetImage(0);
-		m_DynamicImage.SetColor(ARGB(170, 255, 255, 255));
-		m_DynamicImage.Show(false);
+		m_StyleLayouts = new array<Widget>();
+		m_StyleRoots = new array<Widget>();
+		m_StyleImages = new array<ImageWidget>();
+
+		if (!AddCrosshairStyle("Generic_Gunplay/GUI/layouts/GGHipFireCrosshair.layout", "GGHipFireCrosshairRoot", "GGHipFireCrosshairImage")) return;
+		if (!AddCrosshairStyle("Generic_Gunplay/GUI/layouts/GGHipFireCrosshairDot.layout", "GGHipFireCrosshairDotRoot", "GGHipFireCrosshairDotImage")) return;
+		if (!AddCrosshairStyle("Generic_Gunplay/GUI/layouts/GGHipFireCrosshairOpenCross.layout", "GGHipFireCrosshairOpenCrossRoot", "GGHipFireCrosshairOpenCrossImage")) return;
+		if (!AddCrosshairStyle("Generic_Gunplay/GUI/layouts/GGHipFireCrosshairTacticalT.layout", "GGHipFireCrosshairTacticalTRoot", "GGHipFireCrosshairTacticalTImage")) return;
+		if (!AddCrosshairStyle("Generic_Gunplay/GUI/layouts/GGHipFireCrosshairBrackets.layout", "GGHipFireCrosshairBracketsRoot", "GGHipFireCrosshairBracketsImage")) return;
+		if (!AddCrosshairStyle("Generic_Gunplay/GUI/layouts/GGHipFireCrosshairCrossDot.layout", "GGHipFireCrosshairCrossDotRoot", "GGHipFireCrosshairCrossDotImage")) return;
+
+		UpdateAppearance();
+		HideStyleWidgets();
+		GGDebug.ClientOnce(7, "CROSSHAIR", "layouts_ready", "All six dynamic crosshair layouts initialized");
 	}
 
 	void ~GGHipFireCrosshair()
 	{
-		if (m_Root) m_Root.Unlink();
+		if (!m_StyleLayouts) return;
+		for (int index = 0; index < m_StyleLayouts.Count(); index++)
+		{
+			Widget layoutRoot = m_StyleLayouts.Get(index);
+			if (layoutRoot) layoutRoot.Unlink();
+		}
 	}
 
 	void OnUpdate(float timeslice)
 	{
-		if (!m_Root || !m_DynamicRoot || !m_DynamicImage) return;
+		if (!IsReady()) return;
+		if (GGDebug.Enabled(10))
+			GGDebug.ClientCount(10, "CROSSHAIR", "hud_updates", 10000);
+		UpdateAppearance();
 		Weapon_Base weapon;
 		if (!CanShow(weapon))
 		{
+			GGDebug.ClientState(7, "CROSSHAIR", "visibility", "hidden", "Dynamic crosshair hidden");
 			Hide();
 			return;
 		}
@@ -121,22 +143,154 @@ class GGHipFireCrosshair : Managed
 		}
 
 		float size = Math.Clamp(BASE_SIZE * Math.Clamp(weapon.GetGGHipFireModifier(), 0.45, 1.45), MIN_SIZE, MAX_SIZE);
-		m_DynamicImage.SetSize(size, size);
-		m_DynamicImage.SetPos(-size * 0.5, -size * 0.5);
+		if (!ApplyStyle(size))
+		{
+			Hide();
+			return;
+		}
+		if (GGDebug.Enabled(7))
+		{
+			string visibleState = "visible|" + weapon.GetType();
+			visibleState += "|" + size.ToString();
+			string visibleMessage = "Dynamic crosshair visible. weapon=" + weapon.GetType();
+			visibleMessage += " size=" + size.ToString();
+			GGDebug.ClientState(7, "CROSSHAIR", "visibility", visibleState, visibleMessage);
+		}
 		m_DynamicRoot.SetPos(m_ScreenPosition[0], m_ScreenPosition[1]);
-		m_DynamicImage.Show(true);
+	}
+
+	protected void UpdateAppearance()
+	{
+		if (!IsReady()) return;
+		GGClientSettings clientSettings = GetGGConfigManager().GetClientSettings();
+		int colorIndex = 0;
+		int opacityIndex = 2;
+		if (clientSettings)
+		{
+			colorIndex = Math.Clamp(clientSettings.CrosshairColor, 0, 5);
+			opacityIndex = Math.Clamp(clientSettings.CrosshairOpacity, 0, 3);
+		}
+		if (colorIndex == m_AppliedColor && opacityIndex == m_AppliedOpacity) return;
+
+		int alpha = 191;
+		switch (opacityIndex)
+		{
+			case 0: alpha = 64; break;
+			case 1: alpha = 128; break;
+			case 2: alpha = 191; break;
+			case 3: alpha = 255; break;
+		}
+
+		int red = 255;
+		int green = 255;
+		int blue = 255;
+		switch (colorIndex)
+		{
+			case 1: red = 255; green = 70; blue = 70; break;
+			case 2: red = 70; green = 255; blue = 110; break;
+			case 3: red = 70; green = 235; blue = 255; break;
+			case 4: red = 255; green = 225; blue = 60; break;
+			case 5: red = 255; green = 145; blue = 40; break;
+		}
+
+		int color = ARGB(alpha, red, green, blue);
+		for (int index = 0; index < m_StyleImages.Count(); index++)
+		{
+			ImageWidget image = m_StyleImages.Get(index);
+			if (image) image.SetColor(color);
+		}
+		m_AppliedColor = colorIndex;
+		m_AppliedOpacity = opacityIndex;
+		GGDebug.ClientState(7, "CROSSHAIR", "appearance", colorIndex.ToString() + "|" + opacityIndex.ToString(), "Crosshair appearance changed. color=" + colorIndex.ToString() + " opacity=" + opacityIndex.ToString());
+	}
+
+	protected bool ApplyStyle(float size)
+	{
+		GGClientSettings clientSettings = GetGGConfigManager().GetClientSettings();
+		int style = 0;
+		if (clientSettings) style = Math.Clamp(clientSettings.CrosshairStyle, 0, 5);
+		if (GGDebug.Enabled(7))
+			GGDebug.ClientState(7, "CROSSHAIR", "style", style.ToString(), "Crosshair style selected");
+
+		if (style != m_AppliedStyle || !m_DynamicRoot || !m_DynamicImage)
+		{
+			if (m_DynamicImage) m_DynamicImage.Show(false);
+			m_DynamicRoot = m_StyleRoots.Get(style);
+			m_DynamicImage = m_StyleImages.Get(style);
+			m_AppliedStyle = style;
+			m_AppliedSize = -1.0;
+			m_IsVisible = false;
+		}
+		if (!m_DynamicRoot || !m_DynamicImage) return false;
+		if (!GGUtil.NearlyEqual(size, m_AppliedSize, 0.01))
+		{
+			m_DynamicImage.SetSize(size, size);
+			m_DynamicImage.SetPos(-size * 0.5, -size * 0.5);
+			m_AppliedSize = size;
+		}
+		if (!m_IsVisible)
+		{
+			m_DynamicImage.Show(true);
+			m_IsVisible = true;
+		}
+		return true;
+	}
+
+	protected void HideStyleWidgets()
+	{
+		if (m_StyleImages)
+		{
+			for (int index = 0; index < m_StyleImages.Count(); index++)
+			{
+				ImageWidget image = m_StyleImages.Get(index);
+				if (image) image.Show(false);
+			}
+		}
+		m_DynamicRoot = null;
+		m_DynamicImage = null;
+		m_AppliedStyle = -1;
+		m_AppliedSize = -1.0;
+		m_IsVisible = false;
+	}
+
+	protected bool AddCrosshairStyle(string layoutPath, string rootName, string imageName)
+	{
+		Widget layoutRoot = GetGame().GetWorkspace().CreateWidgets(layoutPath);
+		if (!layoutRoot) return false;
+		Widget styleRoot = layoutRoot.FindAnyWidget(rootName);
+		ImageWidget styleImage = ImageWidget.Cast(layoutRoot.FindAnyWidget(imageName));
+		if (!styleRoot || !styleImage)
+		{
+			layoutRoot.Unlink();
+			return false;
+		}
+
+		styleImage.SetImage(0);
+		styleImage.Show(false);
+		m_StyleLayouts.Insert(layoutRoot);
+		m_StyleRoots.Insert(styleRoot);
+		m_StyleImages.Insert(styleImage);
+		return true;
+	}
+
+	protected bool IsReady()
+	{
+		if (!m_StyleLayouts || !m_StyleRoots || !m_StyleImages) return false;
+		if (m_StyleLayouts.Count() != STYLE_COUNT) return false;
+		if (m_StyleRoots.Count() != STYLE_COUNT) return false;
+		if (m_StyleImages.Count() != STYLE_COUNT) return false;
+		return true;
 	}
 
 	protected bool CanShow(out Weapon_Base weapon)
 	{
 		GGSettings settings = GetGGConfigManager().GetSettings();
-		int mode = GetGGConfigManager().GetEffectiveCrosshairMode();
-		if (!settings || mode == 0 || !settings.EnableHipFireAlignment) return false;
+		if (!settings || !settings.EnableHipFireAlignment) return false;
 		if (!g_Game.GetProfileOption(EDayZProfilesOptions.CROSSHAIR) || g_Game.GetWorld().IsCrosshairDisabled()) return false;
 
 		m_Player = PlayerBase.Cast(GetGame().GetPlayer());
 		if (!m_Player || !m_Player.IsPlayerSelected() || !m_Player.IsFireWeaponRaised() || m_Player.IsInTransport()) return false;
-		mode = m_Player.GetGGResolvedCrosshairMode();
+		int mode = m_Player.GetGGResolvedCrosshairMode();
 		if (mode == 0) return false;
 		HumanInputController controller = m_Player.GetInputController();
 		if (!controller || controller.CameraIsFreeLook()) return false;
@@ -167,6 +321,8 @@ class GGHipFireCrosshair : Managed
 		vector traceEnd = endPoint + (direction * PROJECT_DISTANCE);
 		vector contactDirection;
 		int contactComponent;
+		if (GGDebug.Enabled(9))
+			GGDebug.ClientCount(9, "CROSSHAIR", "raycasts", 10000);
 		if (DayZPhysics.RaycastRV(endPoint, traceEnd, worldPosition, contactDirection, contactComponent, null, weapon, m_Player, false, false, ObjIntersectFire)) return true;
 		worldPosition = traceEnd;
 		return true;
@@ -174,11 +330,14 @@ class GGHipFireCrosshair : Managed
 
 	protected void Hide()
 	{
+		bool alreadyHidden = !m_IsVisible;
+		if (alreadyHidden && !m_HasPosition && !m_HasWorldPosition && !m_RaycastWeapon) return;
 		m_HasPosition = false;
 		m_HasWorldPosition = false;
 		m_RaycastElapsed = 0.0;
 		m_RaycastWeapon = null;
-		if (m_DynamicImage) m_DynamicImage.Show(false);
+		if (m_DynamicImage && m_IsVisible) m_DynamicImage.Show(false);
+		m_IsVisible = false;
 	}
 }
 

@@ -38,6 +38,7 @@ class GGDiscovery
 	bool ScanAndMerge(GGItemsConfig items, GGSettings settings, GGWeaponAttachmentsFile weaponAttachments)
 	{
 		if (!g_Game || !items || !settings || !weaponAttachments) return false;
+		int debugStarted = GGDebug.BeginTiming(9);
 		m_Items = items;
 		m_Settings = settings;
 		m_WeaponAttachments = weaponAttachments;
@@ -74,6 +75,15 @@ class GGDiscovery
 		if (m_RemovedInvalidArmor > 0)
 			summary += " Removed invalid armor/clothing entries=" + m_RemovedInvalidArmor.ToString() + ".";
 		GGUtil.Log(summary);
+		string addedDetails = "weapons=" + m_AddedWeapons.ToString();
+		addedDetails += " attachments=" + m_AddedAttachments.ToString();
+		addedDetails += " magazines=" + m_AddedMagazines.ToString();
+		addedDetails += " projectiles=" + m_AddedAmmo.ToString();
+		addedDetails += " armor=" + m_AddedArmor.ToString();
+		addedDetails += " weaponSlots=" + m_AddedWeaponSlots.ToString();
+		addedDetails += " removedInvalidArmor=" + m_RemovedInvalidArmor.ToString();
+		GGDebug.Log(4, "DISCOVERY", "Discovery changes: " + addedDetails);
+		GGDebug.EndTiming(9, "PERFORMANCE", "Config discovery", debugStarted, addedDetails);
 		return newEntries > 0 || m_RemovedInvalidArmor > 0;
 	}
 
@@ -147,6 +157,8 @@ class GGDiscovery
 				m_Items.Weapons.Insert(weapon);
 				m_Weapons.Set(GGUtil.Key(className), weapon);
 				m_AddedWeapons++;
+				if (GGDebug.Enabled(10))
+					GGDebug.Once(10, "DISCOVERY", "weapon_" + GGUtil.Key(className), "Added weapon " + className + " parent=" + weapon.ParentClass);
 			}
 			else
 			{
@@ -308,6 +320,13 @@ class GGDiscovery
 				m_Items.Magazines.Insert(magazine);
 				m_Magazines.Set(GGUtil.Key(className), magazine);
 				m_AddedMagazines++;
+				if (GGDebug.Enabled(10))
+				{
+					string magazineDebug = "Added magazine/ammo pile " + className;
+					magazineDebug += " capacity=" + capacity.ToString();
+					magazineDebug += " tier=" + magazine.TierKey;
+					GGDebug.Once(10, "DISCOVERY", "magazine_" + GGUtil.Key(className), magazineDebug);
+				}
 			}
 			g_Game.ConfigGetBaseName(path, magazine.ParentClass);
 			magazine.IsLooseAmmo = InheritsFrom("CfgMagazines", className, "Ammunition_Base");
@@ -420,6 +439,13 @@ class GGDiscovery
 			m_Items.Attachments.Insert(attachment);
 			m_Attachments.Set(GGUtil.Key(className), attachment);
 			m_AddedAttachments++;
+			if (GGDebug.Enabled(10))
+			{
+				string attachmentDebug = "Added attachment " + className;
+				attachmentDebug += " category=" + attachment.Category;
+				attachmentDebug += " tier=" + attachment.TierKey;
+				GGDebug.Once(10, "DISCOVERY", "attachment_" + GGUtil.Key(className), attachmentDebug);
+			}
 		}
 		else
 		{
@@ -575,7 +601,17 @@ class GGDiscovery
 		{
 			bool previousSlotIgnored;
 			if (!previousSlots.Find(GGUtil.Key(activeSlot), previousSlotIgnored))
+			{
 				m_AddedWeaponSlots++;
+				if (GGDebug.Enabled(10))
+				{
+					string slotDebugKey = "slot_" + GGUtil.Key(weapon.ClassName);
+					slotDebugKey += "_" + GGUtil.Key(activeSlot);
+					string slotDebug = "Added compatibility slot " + activeSlot;
+					slotDebug += " for " + weapon.ClassName;
+					GGDebug.Once(10, "DISCOVERY", slotDebugKey, slotDebug);
+				}
+			}
 		}
 		policy.Slots = activeSlots;
 	}
@@ -816,6 +852,8 @@ class GGDiscovery
 			m_Items.Armor.Insert(armor);
 			m_Armor.Set(GGUtil.Key(className), armor);
 			m_AddedArmor++;
+			if (GGDebug.Enabled(10))
+				GGDebug.Once(10, "DISCOVERY", "armor_" + GGUtil.Key(className), "Added armor/clothing " + className);
 		}
 
 		armor.DetectedProjectileReduction = GetArmorReduction(className, "Projectile");
@@ -851,6 +889,8 @@ class GGDiscovery
 				m_Items.Ammunition.Insert(ammo);
 				m_Ammo.Set(GGUtil.Key(className), ammo);
 				m_AddedAmmo++;
+				if (GGDebug.Enabled(10))
+					GGDebug.Once(10, "DISCOVERY", "ammo_" + GGUtil.Key(className), "Added projectile " + className);
 			}
 			RefreshAmmo(ammo);
 			ammo.IsCurrentlyLoaded = true;

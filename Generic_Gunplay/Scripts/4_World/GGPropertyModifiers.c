@@ -21,5 +21,15 @@ modded class PropertyModifiers
 			m_SwayModifiers[1] = sway;
 			m_SwayModifiers[2] = swaySpeed;
 		}
+		if (GGDebug.Enabled(6))
+		{
+			string state = recoil.ToString() + "|" + sway.ToString() + "|" + swaySpeed.ToString();
+			string message = "Applied property modifiers. weapon=" + weapon.GetType();
+			message += " recoil=" + recoil.ToString();
+			message += " sway=" + sway.ToString();
+			message += " swaySpeed=" + swaySpeed.ToString();
+			GGDebug.State(6, "MODIFIERS", GGUtil.Key(weapon.GetType()), state, message);
+			GGDebug.ClientState(6, "MODIFIERS", GGUtil.Key(weapon.GetType()), state, message);
+		}
 	}
 }

@@ -1,7 +1,7 @@
 class GGConstants
 {
 	static const int CONFIG_VERSION = 1;
-	static const int SYNC_PROTOCOL_VERSION = 3;
+	static const int SYNC_PROTOCOL_VERSION = 8;
 	static const int WEAPON_ATTACHMENTS_FORMAT_VERSION = 2;
 
 	static const string CONFIG_DIR = "$profile:Generic_Gunplay";
@@ -19,9 +19,16 @@ class GGConstants
 	static const int RPC_CONFIG_CHUNK = 4786102;
 	static const int RPC_CONFIG_ERROR = 4786103;
 	static const int RPC_CLIENT_CROSSHAIR = 4786104;
-	static const int SYNC_CHUNK_SIZE = 7000;
+	static const int RPC_CONFIG_HELLO = 4786105;
+	static const int RPC_CONFIG_ACK = 4786106;
+	static const int RPC_DEBUG_EVENT = 4786107;
+
+	static const int SYNC_CHUNK_SIZE = 900;
 	static const int MAX_SYNC_CHUNKS = 4096;
 	static const int MAX_SYNC_CHARS = 24000000;
+	static const int CLIENT_SYNC_RETRY_MS = 6000;
+	static const int SERVER_SYNC_BURST_MS = 40;
+	static const int SERVER_SYNC_BURST_CHUNKS = 8;
 }
 
 class GGUtil

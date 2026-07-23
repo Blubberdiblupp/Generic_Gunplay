@@ -8,13 +8,19 @@ modded class InspectMenuNew
 		super.SetItem(item);
 		EnsureGGInspectPanel();
 		if (!m_GGInspectPanel) return;
-		GGSettings settings = GetGGConfigManager().GetSettings();
-		if (!settings || !settings.EnableInspectStats || !item)
+		if (!GetGGConfigManager().ShouldShowInspectStats() || !item)
 		{
 			m_GGInspectPanel.Hide();
 			return;
 		}
-		m_GGInspectPanel.Apply(GGDisplayStats.GetDisplay(item));
+		bool applied = m_GGInspectPanel.Apply(GGDisplayStats.GetDisplay(item));
+		if (GGDebug.Enabled(8))
+		{
+			string shown = GGDebug.BoolString(applied);
+			string message = "Inspect stat panel updated. item=" + item.GetType();
+			message += " shown=" + shown;
+			GGDebug.ClientState(8, "UI", "inspect", item.GetType() + "|" + shown, message);
+		}
 	}
 
 	protected void EnsureGGInspectPanel()
